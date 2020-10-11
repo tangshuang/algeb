@@ -1,4 +1,5 @@
-import { source, select, use, compose, affect, query, setup } from 'algeb'
+import { source, query, compose, affect, setup } from '../src/index.js'
+
 
 /**
  * Sources
@@ -6,52 +7,53 @@ import { source, select, use, compose, affect, query, setup } from 'algeb'
  */
 
 const Book = source(async function(bookId) {
-  const res = await fetch(URL + bookId).then(res => res.json())
-  const { data } = res
+  const data = await Promise.resolve().then(() => {
+    const random = +(Math.random() * 100).toFixed(2)
+    return {
+      title: 'Book:' + bookId,
+      price: random,
+    }
+  })
   return data
 }, {
-  title: '',
+  title: 'Book',
   price: 0,
 })
 
 const Photo = source(async function(photoId) {
-  const res = await fetch(URL + photoId).then(res => res.json())
-  const { data } = res
+  const data = await Promise.resolve().then(() => {
+    const random = +(Math.random() * 100).toFixed(2)
+    return {
+      title: 'Photo:' + photoId,
+      price: random,
+    }
+  })
   return data
 }, {
-  title: '',
+  title: 'Photo',
   price: 0,
 })
 
 
 /**
- * Selectors
- * Sync/Async
- */
-
-const Total = select(function(bookId, photoId) {
-  const book = query(Book, bookId)
-  const photo = query(Photo, photoId)
-  return book.price + photo.price
-})
-
-
-/**
- * Queries
+ * Compsoe
  * Sync
  */
 
-const Query = compose(function(bookId, photoId) {
-  const [book, fetchBook] = use(Book, bookId)
-  const [photo, fetchPhoto] = use(Photo, photoId)
-  const total = query(Total, bookId, photoId)
+const Mix = compose(function(bookId, photoId) {
+  const [book, fetchBook] = query(Book, bookId)
+  const [photo, fetchPhoto] = query(Photo, photoId)
+
+  const total = book.price + photo.price
 
   affect(() => {
     const timer = setInterval(() => {
       fetchBook()
       fetchPhoto()
-    }, 1000)
-    return () => clearInterval(timer)
+    }, 5000)
+    return () => {
+      clearInterval(timer)
+    }
   }, [book, photo])
 
   return { book, photo, total }
@@ -60,15 +62,17 @@ const Query = compose(function(bookId, photoId) {
 
 /**
  * Setup/Run
+ * Sync
  */
 
 setup(function() {
-  const { book, photo, total } = query(Query, 'book id', 'photo id')
+  const [{ book, photo, total }] = query(Mix, 100, 200)
 
   const html = `
     <div>
       <span>Book Name: ${book.title}</span>
       <span>Photo Name: ${photo.title}</span>
+      <br />
       <span>Total Cost: ${total}</span>
     </div>
   `

@@ -1,0 +1,24 @@
+{
+  "name": "algeb",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "parcel ./spec/index.html"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://gitee.com/frustigor/algeb.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "ts-fns": "^8.1.9"
+  },
+  "devDependencies": {
+    "parcel-bundler": "^1.12.4"
+  },
+  "browserslist": [
+    "last 1 Chrome version"
+  ]
+}
