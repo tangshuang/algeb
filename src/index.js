@@ -9,6 +9,8 @@ const CELL_TYPES = {
 const HOSTS_CHAIN = []
 const HOOKS_CHAIN = []
 
+let isGettingComposeValue = false
+
 export function source(get, value) {
   const cell = {
     type: CELL_TYPES.SOURCE,
@@ -20,17 +22,24 @@ export function source(get, value) {
 }
 
 export function compose(get) {
+  isGettingComposeValue = true
+  const value = get()
+  isGettingComposeValue = false
   const cell = {
     type: CELL_TYPES.COMPOSE,
     get,
     atoms: [],
+    value,
   }
   return cell
 }
 
 export function query(cell, ...params) {
-  const { type } = cell
-  if (type === CELL_TYPES.SOURCE) {
+  const { type, value } = cell
+  if (isGettingComposeValue) {
+    return [value]
+  }
+  else if (type === CELL_TYPES.SOURCE) {
     return querySource(cell, ...params)
   }
   else if (type === CELL_TYPES.COMPOSE) {
@@ -58,13 +67,18 @@ function querySource(cell, ...params) {
         // reset
         atom.deferer = null
         // recompute
-        atom.hosts.forEach((host) => {
-          host.next()
+        atom.hosts.forEach((host, i) => {
+          if (host.end) { // the host is destoryed
+            atom.hosts.splice(i, 1)
+          }
+          else {
+            host.next()
+          }
         })
       })
     }, 16)
 
-    const item = atom || { hash, next, hosts: [] }
+    const item = atom || { hash, next, hosts: [], cell }
     const host = HOSTS_CHAIN[HOSTS_CHAIN.length - 1]
 
     if (!atom) {
@@ -103,18 +117,24 @@ function queryCompose(cell, ...params) {
       const atom = atoms.find(item => item.hash === hash)
       compute(atom)
       // recompute
-      atom.hosts.forEach((host) => {
-        host.next()
+      atom.hosts.forEach((host, i) => {
+        if (host.end) { // the host is destoryed
+          atom.hosts.splice(i, 1)
+        }
+        else {
+          host.next()
+        }
       })
     }, 16)
 
-    const emit = throttle(() => {
+    const emit = throttle((...cells) => {
       const atom = atoms.find(item => item.hash === hash)
       // host will recompute/popagate in dep.next, so we do not need to do `next` any more
-      atom.deps.map(dep => dep.next())
+      const deps = cells.length ? atom.deps.filter(dep => cells.includes(dep.cell)) : atom.deps
+      deps.map(dep => dep.next())
     }, 16)
 
-    const item = atom || { hash, next, emit, deps: [], hosts: [], hooks: [] }
+    const item = atom || { hash, next, emit, deps: [], hosts: [], hooks: [], cell }
     const host = HOSTS_CHAIN[HOSTS_CHAIN.length - 1]
 
     if (!atom) {
@@ -138,11 +158,16 @@ export function setup(run) {
   run()
   HOSTS_CHAIN.pop()
   HOOKS_CHAIN.length = 0 // clear hooks list
+  return () => { atom.end = true }
 }
 
 // hooks -------------
 
 export function affect(invoke, deps) {
+  if (isGettingComposeValue) {
+    return
+  }
+
   const host = HOSTS_CHAIN[HOSTS_CHAIN.length - 1]
   const index = HOOKS_CHAIN.length
 
@@ -150,7 +175,10 @@ export function affect(invoke, deps) {
 
   const hook = host.hooks[index]
   if (hook) {
-    if ((!deps && !hook.deps) || !isEqual(deps, hook.deps)) {
+    if (!deps && !hook.deps) {
+      return
+    }
+    if (!isEqual(deps, hook.deps)) {
       if (hook.revoke) {
         hook.revoke()
       }
@@ -161,5 +189,35 @@ export function affect(invoke, deps) {
   else {
     const revoke = invoke()
     host.hooks[index] = { deps, revoke }
+  }
+}
+
+export function select(compute, deps) {
+  if (isGettingComposeValue) {
+    return
+  }
+
+  const host = HOSTS_CHAIN[HOSTS_CHAIN.length - 1]
+  const index = HOOKS_CHAIN.length
+
+  HOOKS_CHAIN.push(1)
+
+  const hook = host.hooks[index]
+  if (hook) {
+    if (!deps && !hook.deps) {
+      return hook.value
+    }
+    else if (isEqual(deps, hook.deps)) {
+      return hook.value
+    }
+    else {
+      const value = hook.compute()
+      hook.value = value
+      return value
+    }
+  }
+  else {
+    const value = compute()
+    host.hooks[index] = { deps, value, compute }
   }
 }

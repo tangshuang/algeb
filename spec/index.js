@@ -10,7 +10,7 @@ const Book = source(async function(bookId) {
   const data = await Promise.resolve().then(() => {
     const random = +(Math.random() * 100).toFixed(2)
     return {
-      title: 'Book:' + bookId,
+      title: 'Book_' + bookId,
       price: random,
     }
   })
@@ -24,7 +24,7 @@ const Photo = source(async function(photoId) {
   const data = await Promise.resolve().then(() => {
     const random = +(Math.random() * 100).toFixed(2)
     return {
-      title: 'Photo:' + photoId,
+      title: 'Photo_' + photoId,
       price: random,
     }
   })
@@ -71,9 +71,10 @@ setup(function() {
   const html = `
     <div>
       <span>Book Name: ${book.title}</span>
+      <br />
       <span>Photo Name: ${photo.title}</span>
       <br />
-      <span>Total Cost: ${total}</span>
+      <span>Total Cost: $${total.toFixed(2)}</span>
     </div>
   `
 
