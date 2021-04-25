@@ -153,11 +153,15 @@ function queryCompose(cell, ...params) {
 }
 
 export function setup(run) {
-  const atom = { deps: [], hooks: [], next: run }
-  HOSTS_CHAIN.push(atom)
-  run()
-  HOSTS_CHAIN.pop()
-  HOOKS_CHAIN.length = 0 // clear hooks list
+  const atom = { deps: [], hooks: [] }
+  const next = () => {
+    HOSTS_CHAIN.push(atom)
+    run()
+    HOSTS_CHAIN.pop()
+    HOOKS_CHAIN.length = 0 // clear hooks list
+  }
+  atom.next = next
+  next()
   return () => { atom.end = true }
 }
 
@@ -205,19 +209,68 @@ export function select(compute, deps) {
   const hook = host.hooks[index]
   if (hook) {
     if (!deps && !hook.deps) {
+      hook.deps = deps
       return hook.value
     }
     else if (isEqual(deps, hook.deps)) {
+      hook.deps = deps
       return hook.value
     }
     else {
-      const value = hook.compute()
+      const value = compute()
       hook.value = value
+      hook.deps = deps
       return value
     }
   }
   else {
     const value = compute()
-    host.hooks[index] = { deps, value, compute }
+    host.hooks[index] = { deps, value }
+    return value
+  }
+}
+
+export function apply(get, value) {
+  if (isGettingComposeValue) {
+    return (value => [value])
+  }
+
+  const host = HOSTS_CHAIN[HOSTS_CHAIN.length - 1]
+  const index = HOOKS_CHAIN.length
+
+  HOOKS_CHAIN.push(1)
+
+  const hook = host.hooks[index]
+  if (hook) {
+    const { query } = hook
+    return query
+  }
+  else {
+    const cell = source(get, value)
+    const next = (...args) => query(cell, ...args)
+    const hook = { query: next }
+    host.hooks[index] = hook
+    return next
+  }
+}
+
+export function ref(value) {
+  if (isGettingComposeValue) {
+    return { value }
+  }
+
+  const host = HOSTS_CHAIN[HOSTS_CHAIN.length - 1]
+  const index = HOOKS_CHAIN.length
+
+  HOOKS_CHAIN.push(1)
+
+  const hook = host.hooks[index]
+  if (hook) {
+    return hook
+  }
+  else {
+    const hook = { value }
+    host.hooks[index] = hook
+    return hook
   }
 }

@@ -127,6 +127,10 @@ updateMix(Book) // 只重新请求Book源
 
 通过compose我们可以组合不同数据源，组合数据源的数据拉取规则，有利于复用一些特定规则。
 
+## Hooks
+
+下面的是hooks函数，它只能在compose或setup内部被使用，否则会导致错误。hooks的使用规则遵循react的规则，不允许在if..else中使用，必须在顶层撰写。
+
 ### affect(fn, deps)
 
 第一个hooks函数，它用于在compose或setup函数中执行一个副作用，它的使用方法和react hooks的useEffect基本一致，但在第二个参数上稍有不同。
@@ -140,6 +144,41 @@ updateMix(Book) // 只重新请求Book源
 
 - 如果不传deps，那么select仅在第一次进行计算，之后永远使用缓存
 - 如果传入数组，那么每次执行会进行deps对比（深对比，对比内部对象每个节点上的值），有差异时才重新计算并缓存新值
+
+### apply(get, default)
+
+某些情况下，你不想单独创建一个source，而是直接在compose中申请一个source，这样可以方便一些特定的source管理。此时，你可以使用apply。
+
+```js
+const Mix = compose(function(bookId) {
+  const queryBook = apply((bookId) => ..., { name, price })
+  const [book, updateBook] = queryBook(bookId)
+  ...
+})
+```
+
+apply本质上就是在compose内部的source函数。这样，你不需要在最外层通过source创建一个源，可以让代码分块更加一目了然。
+
+### ref(value)
+
+有时你需要保持一个不变的量，此时使用ref。
+
+```js
+const Mix = compose(function() {
+  const some = ref(0)
+
+  affect(() => {
+    setInterval(() => {
+      some.value ++
+    }, 1000)
+  }, [])
+
+  const any = select(() => some.value % 2, [some.value])
+  ...
+})
+```
+
+它和react的useRef很像，修改.value不会带来重新请求。
 
 ## React中使用
 

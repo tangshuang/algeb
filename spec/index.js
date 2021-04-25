@@ -1,4 +1,4 @@
-import { source, query, compose, affect, setup } from '../src/index.js'
+import { source, query, compose, affect, setup, apply, ref, select } from '../src/index.js'
 
 
 /**
@@ -40,25 +40,27 @@ const Photo = source(async function(photoId) {
  * Sync
  */
 
-const Mix = compose(function(bookId, photoId) {
+const Mix = compose(function(bookId, photoId, requestId) {
   const [book, fetchBook] = query(Book, bookId)
   const [photo, fetchPhoto] = query(Photo, photoId)
+  const requestRef = ref(0)
+  const [request, setRequest] = apply(() => requestRef.value ++, 0)(requestId)
 
-  const total = book.price + photo.price
+  const total = select(() => book.price + photo.price, [book.price, photo.price])
 
   affect(() => {
     const timer = setInterval(() => {
       fetchBook()
       fetchPhoto()
-    }, 5000)
+      setRequest()
+    }, 2000)
     return () => {
       clearInterval(timer)
     }
   }, [book, photo])
 
-  return { book, photo, total }
+  return { book, photo, total, request }
 })
-
 
 /**
  * Setup/Run
@@ -66,7 +68,7 @@ const Mix = compose(function(bookId, photoId) {
  */
 
 setup(function() {
-  const [{ book, photo, total }] = query(Mix, 100, 200)
+  const [{ book, photo, total, request }] = query(Mix, 100, 200, 0)
 
   const html = `
     <div>
@@ -75,6 +77,8 @@ setup(function() {
       <span>Photo Name: ${photo.title}</span>
       <br />
       <span>Total Cost: $${total.toFixed(2)}</span>
+      <br />
+      <span>Request ID: ${request}</span>
     </div>
   `
 
