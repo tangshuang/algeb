@@ -76,7 +76,39 @@ setup(function() {
 当执行该语句之后，setup中的函数会被执行。当fetchBook函数被调用，触发数据请求，当数据请求完成后，setup中断函数会被再次执行。
 `setup`的fn必须是同步函数，在第一次执行query时，由于请求刚刚发出，会使用default作为值返回。
 
-这就是 Algeb 的执行机制：通过触发数据源的重新请求，在得到新数据之后，重新执行setup中的函数，从而实现副作用的反复执行。
+这就是 Algeb 的执行机制：通过触发数据源的重新请求，在得到新数据之后，重新执行setup中的函数，从而实现副作用的反复执行。'
+
+setup返回一个对象，它包含：
+
+```
+{
+  stop(): 停止setup再次执行的机制
+  start(): 如果执行完stop后，你又想再次运行这个机制，可以再调用start重新开始，如果没有执行过stop，调用start没有任何效果
+  value: fn的返回值，在执行机制中，fn会被反复执行，每次执行后，value都会被修改
+}
+```
+
+例子：
+
+```js
+const ctx = setup(() => {
+  const [book, fetchBook] = query(Book, bookId)
+
+  render`
+    <div>
+      <span>${book.title}</span>
+      <span>${book.price}</span>
+      <button onclick="${fetchBook}">refresh</button>
+    </div>
+  `
+
+  return book
+})
+
+setInterval(() => {
+  console.log(ctx.value) // 每次都可能不一样
+}, 1000)
+```
 
 ## 高级用法
 
@@ -111,9 +143,9 @@ const Mix = compose(function(bookId, photoId) {
 
 我们可以同时组合多个源，组合函数必须是同步函数。组合函数返回组合后的复杂对象，还可以在内部提供一些特殊逻辑，比如上面的代码中，规定了每5秒钟更新数据源。
 
-在compose组合函数中，你可以使用hooks（下方详解），也可以query其他Compound Source。总之，compose组合其他源，同时可以使用hooks对不同源之间的重新计算逻辑进行逻辑处理。
+在compose组合函数中，你可以使用hooks（下方详解，source中不可以使用hooks），也可以query其他Compound Source。总之，compose组合其他源，同时可以使用hooks对不同源之间的重新计算逻辑进行逻辑处理。
 
-它返回最终生成的复合“源”（Compound Source），它和source生产的源一样，可以被query使用，不同的是，query返回的第二个值（函数）将触发组合内所有被依赖源全部重新请求新数据。
+它返回最终生成的“复合源”（Compound Source），它和source生产的源一样，可以被query使用，不同的是，query返回的第二个值（函数）将触发组合内所有被依赖源全部重新请求新数据。
 
 ```js
 const [mix, updateMix] = query(Mix)
@@ -140,7 +172,7 @@ updateMix(Book) // 只重新请求Book源
 
 ### select(calc, deps)
 
-它用于在compose或setup函数中，采用缓存计算技术得到一个值，和react memo类似，它是否要重新计算值，取决于第二个参数deps是否发生变化。
+它用于在compose或setup函数中，采用缓存计算技术得到一个值，和useMemo类似，它是否要重新计算值，取决于第二个参数deps是否发生变化。
 
 - 如果不传deps，那么select仅在第一次进行计算，之后永远使用缓存
 - 如果传入数组，那么每次执行会进行deps对比（深对比，对比内部对象每个节点上的值），有差异时才重新计算并缓存新值
