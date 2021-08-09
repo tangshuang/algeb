@@ -154,31 +154,28 @@ function queryCompose(cell, ...params) {
 
 export function setup(run) {
   const atom = { deps: [], hooks: [] }
-  let res = null
+  const stop = () => {
+    atom.end = true
+  }
+  stop.value = null
+
   const next = () => {
     HOSTS_CHAIN.push(atom)
-    res = run()
+    stop.value = run()
     // HOSTS_CHAIN.pop()
     HOOKS_CHAIN.length = 0 // clear hooks list
   }
   atom.next = next
   next()
-  const context = {
-    stop: () => {
-      atom.end = true
-    },
-    start: () => {
-      if (!atom.end) {
-        return
-      }
-      atom.end = false
-      next()
-    },
-    get value() {
-      return res
-    },
+
+  stop.next = () => {
+    if (!atom.end) {
+      return
+    }
+    atom.end = false
+    next()
   }
-  return context
+  return stop
 }
 
 // hooks -------------
