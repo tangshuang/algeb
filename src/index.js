@@ -47,6 +47,39 @@ export function query(source, ...params) {
   }
 }
 
+// 向上冒泡
+const emit = (atom) => {
+  if (!atom.hosts) {
+    return
+  }
+
+  atom.hosts.forEach((host, i) => {
+    if (host.end) {
+      atom.hosts.splice(i, 1)
+    }
+    else {
+      host.next()
+    }
+  })
+}
+
+const host = (atom) => {
+  const host = HOSTS_CHAIN[HOSTS_CHAIN.length - 1]
+
+  if (!host) {
+    return
+  }
+
+  if (!host.deps.includes(atom)) {
+    host.deps.push(atom)
+  }
+
+  atom.hosts = atom.hosts || []
+  if (!atom.hosts.includes(host)) {
+    atom.hosts.push(host)
+  }
+}
+
 function querySource(source, ...params) {
   const { atoms, value, get } = source
   const hash = getObjectHash(params)
@@ -54,27 +87,13 @@ function querySource(source, ...params) {
 
   // 找到对应的原子
   if (atom) {
+    host(atom)
     return [atom.value, atom.next]
   }
 
   // 默认原子
   const item = { hash, value }
   atoms.push(item)
-
-  const emit = () => {
-    if (!item.hosts) {
-      return
-    }
-
-    item.hosts.forEach((host, i) => {
-      if (host.end) {
-        item.hosts.splice(i, 1)
-      }
-      else {
-        host.next()
-      }
-    })
-  }
 
   const next = () => {
     if (item.deferer) {
@@ -87,37 +106,33 @@ function querySource(source, ...params) {
       item.deferer = res
         .then((value) => {
           item.value = value
-          // reset
-          item.deferer = null
+          emit(item)
+          return value
         })
-        // 如果是异步的，就再触发一次
-        .then(() => {
-          emit()
+        .finally(() => {
+          item.deferer = null
         })
       return item.deferer
     }
 
     // 如果是同步函数，会立即把值计算出来，这样就不需要在做一次更新
-    item.value = res
-    emit()
-    return Promise.resolve(res)
+    item.deferer = Promise.resolve()
+      .then(() => {
+        item.value = res
+        emit(item)
+        return res
+      })
+      .finally(() => {
+        item.deferer = null
+      })
+    return item.deferer
   }
   item.next = next
 
-  const host = HOSTS_CHAIN[HOSTS_CHAIN.length - 1]
-  const root = HOSTS_CHAIN[0]
-
-  if (root) {
-    item.root = root
-  }
-
-  if (host) {
-    host.deps.push(item)
-    item.hosts = [host]
-  }
-
   // 立即开始请求
   next()
+  // 加入图中
+  host(item)
 
   return [value, next]
 }
@@ -128,95 +143,84 @@ function queryCompose(source, ...params) {
   const atom = atoms.find(item => item.hash === hash)
 
   if (atom) {
-    return [atom.value, atom.emit]
+    host(atom)
+    return [atom.value, atom.broadcast]
   }
 
   const item = { hash, value, deps: [], hooks: [] }
   atoms.push(item)
 
-  const compute = (atom) => {
-    HOSTS_CHAIN.push(atom)
+  const run = () => {
+    HOSTS_CHAIN.push(item)
     const value = get(...params)
-    atom.value = value
+    item.value = value
     HOSTS_CHAIN.pop()
     HOOKS_CHAIN.length = 0 // clear hooks list
   }
 
   const next = () => {
-    const atom = atoms.find(item => item.hash === hash)
-    compute(atom)
-    // recompute
-    atom.hosts.forEach((host, i) => {
-      if (host.end) { // the host is destoryed
-        atom.hosts.splice(i, 1)
-      }
-      else {
-        host.next()
-      }
-    })
+    run(item)
+    emit(item)
+    return Promise.resolve(item.value)
   }
+  item.next = next
 
-  const emit = throttle((...cells) => {
-    const atom = atoms.find(item => item.hash === hash)
+  const broadcast = (...sources) => {
     // host will recompute/popagate in dep.next, so we do not need to do `next` any more
-    const deps = cells.length ? atom.deps.filter(dep => cells.includes(dep.source)) : atom.deps
-    deps.map(dep => dep.next())
-  }, 16)
 
+    const deps = item.deps
 
-  const host = HOSTS_CHAIN[HOSTS_CHAIN.length - 1]
+    // 如果传入了对应的source，那么只更新内部对应这几个source的内容
+    if (sources.length) {
+      const needs = []
+      sources.forEach((source) => {
+        source.atoms.forEach((atom) => {
+          if (deps.includes(atom) && !needs.includes(atom)) {
+            needs.push(atom)
+          }
+        })
+      })
+      const reqs = needs.map(atom => atom.next())
+      return Promise.all(reqs).then(() => item.value)
+    }
+
+    const reqs = deps.map(atom => atom.next())
+    return Promise.all(reqs).then(() => item.value)
+  }
+  item.broadcast = broadcast
 
   // 立即计算
-  compute(item)
+  run(item)
+  // 加入图中
+  host(item)
 
-  if (host) {
-    host.deps.push(item)
-    item.hosts.push(host)
-  }
-
-  return [item.value, emit]
+  return [item.value, broadcast]
 }
 
 export function setup(run) {
-  const atom = { deps: [], hooks: [] }
+  const root = { deps: [], hooks: [], root: true }
   const stop = () => {
-    atom.end = true
+    root.end = true
   }
   stop.value = null
 
-  const next = () => {
-    HOSTS_CHAIN.push(atom)
+  const next = throttle(() => {
+    HOSTS_CHAIN.push(root)
     stop.value = run()
     // HOSTS_CHAIN.pop()
     HOOKS_CHAIN.length = 0 // clear hooks list
-  }
-  atom.next = next
-  next()
-
-  // 创建一个队列，队列内保持所有源的更新操作，当全部更新结束后，执行副作用
-  // 最多每16ms执行一次
-  const queue = []
-  const consume = throttle(() => {
-    Promise.all(queue.map(fn => Promise.resolve(fn()))).then(() => {
-      next()
-    })
-    queue.length = 0
-  }, 16)
-  const push = (fn) => { // 这里的fn必须是atom.next
-    if (!queue.includes(fn)) {
-      queue.push(fn)
-    }
-    consume()
-  }
-  atom.push = push
+  }, 10)
+  root.next = next
 
   stop.next = () => {
     if (!atom.end) {
       return
     }
-    atom.end = false
+    root.end = false
     next()
   }
+
+  next()
 
   return stop
 }

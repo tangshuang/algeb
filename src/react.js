@@ -1,17 +1,17 @@
 import { useState, useEffect, useRef } from 'react'
 import { query, setup } from './index.js'
 
-export function useQuery(src, ...params) {
-  const [data, update] = useState(src.value)
+export function useQuery(source, ...params) {
+  const [data, update] = useState(source.value)
   const fn = useRef(null)
 
   useEffect(() => {
     return setup(function() {
-      const [some, fetchSome] = query(src, ...params)
+      const [some, fetchSome] = query(source, ...params)
       update(some)
       fn.current = fetchSome
     })
-  }, [src, ...params])
+  }, [source, ...params])
 
   return [data, () => fn.current()]
 }

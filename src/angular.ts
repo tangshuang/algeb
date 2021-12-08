@@ -2,10 +2,7 @@ import { Injectable, ChangeDetectorRef } from '@angular/core'
 import { query, setup } from './index.js'
 
 interface Source {
-  type:number,
-  value:unknown,
-  atoms:[],
-  [key:string]:unknown
+  value: any,
 }
 
 @Injectable({
@@ -16,12 +13,12 @@ export class Algeb {
 
   constructor(private detectorRef:ChangeDetectorRef) {}
 
-  useQuery(src:Source, ...params:any[]) {
-    const data = { value: src.value }
+  useQuery(source:Source, ...params:any[]) {
+    const data = { value: source.value }
     let fn:Function
 
     const destroy = setup(function() {
-      const [some, fetchSome] = query(src, ...params)
+      const [some, fetchSome] = query(source, ...params)
       data.value = some
       fn = fetchSome
       this.detectorRef.detectChanges()
