@@ -71,8 +71,6 @@ setup(function() {
   const [bookData, fetchBook] = query(Book, 100)
   const [{ book, photo, total, request }] = query(Mix, 100, 200, 0)
 
-  console.log(bookData)
-
   const html = `
     <div>
       <span>Book Name: ${book.title}</span>

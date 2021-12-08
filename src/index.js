@@ -37,7 +37,7 @@ export function compose(get) {
 export function query(source, ...params) {
   const { type, value } = source
   if (isInitingCompoundSource) {
-    return [value]
+    return [value, () => {}]
   }
   else if (type === SOURCE_TYPES.SOURCE) {
     return querySource(source, ...params)
@@ -258,7 +258,8 @@ export function affect(invoke, deps) {
 
 export function select(compute, deps) {
   if (isInitingCompoundSource) {
-    return
+    const value = compute()
+    return value
   }
 
   const host = HOSTS_CHAIN[HOSTS_CHAIN.length - 1]
@@ -292,7 +293,7 @@ export function select(compute, deps) {
 
 export function apply(get, value) {
   if (isInitingCompoundSource) {
-    return (value => [value])
+    return () => [value, () => {}]
   }
 
   const host = HOSTS_CHAIN[HOSTS_CHAIN.length - 1]
