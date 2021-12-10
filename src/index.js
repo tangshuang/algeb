@@ -1,4 +1,4 @@
-import { getObjectHash, isEqual, throttle } from 'ts-fns'
+import { getObjectHash, isEqual, throttle, isArray } from 'ts-fns'
 
 const SOURCE_TYPES = {
   SOURCE: 1,
@@ -223,6 +223,20 @@ export function setup(run) {
   next()
 
   return stop
+}
+
+/**
+ * 清空些数据源的已有数据
+ * @param {array|object} sources
+ */
+export function release(sources) {
+  if (!isArray(sources)) {
+    sources = Object.values(sources)
+  }
+
+  sources.forEach((source) => {
+    source.atoms = []
+  })
 }
 
 // hooks -------------
