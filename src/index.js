@@ -97,7 +97,7 @@ function querySource(source, ...params) {
 
   const next = () => {
     if (item.deferer) {
-      return
+      return item.deferer
     }
 
     const res = get(...params)
