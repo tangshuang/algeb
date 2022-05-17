@@ -1,6 +1,6 @@
 import { getObjectHash, isEqual, throttle, isArray } from 'ts-fns'
 
-const SOURCE_TYPES = {
+export const SOURCE_TYPES = {
   SOURCE: Symbol(1),
   COMPOSE: Symbol(2),
   SETUP: Symbol(3),
