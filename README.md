@@ -110,6 +110,22 @@ setInterval(() => {
 }, 1000)
 ```
 
+## 非代数效应用法
+
+前面的用法是比较前卫。此外，你可以使用下面接口，实现一些比较传统的操作：
+
+### request(source, ...params)
+
+基于source发起请求，返回一个Promise，返回结果将会根据对应参数是否被请求过进行返回，如果已经请求过，则会返回之前请求的结果。
+
+```js
+const data = await request(source, { id })
+```
+
+### isSource(source)
+
+用于判断一个对象是否为source，返回boolean。
+
 ### release(sources)
 
 释放之前被请求过的源的保持数据，恢复到该源的初始状态。

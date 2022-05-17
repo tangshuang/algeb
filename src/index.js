@@ -1,9 +1,9 @@
 import { getObjectHash, isEqual, throttle, isArray } from 'ts-fns'
 
 const SOURCE_TYPES = {
-  SOURCE: 1,
-  COMPOSE: 2,
-  SETUP: 3,
+  SOURCE: Symbol(1),
+  COMPOSE: Symbol(2),
+  SETUP: Symbol(3),
 }
 
 const HOSTS_CHAIN = []
@@ -237,6 +237,46 @@ export function release(sources) {
   sources.forEach((source) => {
     source.atoms = []
   })
+}
+
+/**
+ * 对一个source发起请求，发起请求时，根据参数信息决定是否使用缓存
+ * 注意，这个动作可能会参数副作用，但由于不在step中执行，没有上下文环境，又不会触发hooks，因此，你需要明确这个source在被request时，不被用于代数上下文
+ * @param {boolean} [force] true 如果第一个参数为true，表示强制请求该数据源
+ * @param {Source} source
+ * @param  {...any} params
+ * @returns {Promise}
+ */
+export function request(source, ...params) {
+  let force = false
+  if (source === true) {
+    force = true
+    source = params.shift()
+  }
+
+  const { atoms, type } = source
+  if (type !== SOURCE_TYPES.SOURCE) {
+    throw new Error(`[alegb]: request can only work with atom source not compound source.`)
+  }
+
+  const hash = getObjectHash(params)
+  const atom = atoms.find(item => item.hash === hash)
+
+  // 找到对应的原子
+  if (atom && !force) {
+    return Promise.resolve(atom.value)
+  }
+
+  return atom.next()
+}
+
+/**
+ * 判断一个值是否为source
+ * @param {*} source
+ * @returns {boolean}
+ */
+export function isSource(source) {
+  return Object.values(SOURCE_TYPES).includes(source && source.type)
 }
 
 // hooks -------------
