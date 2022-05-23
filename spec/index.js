@@ -1,4 +1,4 @@
-import { source, query, compose, affect, setup, apply, ref, select } from '../src/index.js'
+import { source, query, compose, affect, setup, apply, ref, select, request } from '../src/index.js'
 
 
 /**

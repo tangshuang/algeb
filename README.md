@@ -122,6 +122,10 @@ setInterval(() => {
 const data = await request(source, { id })
 ```
 
+在一般情况下，它会直接返回当前数据。如果你希望强制拉取最新数据，可以在第一个参数之前再插入一个参数`true`来强制拉取最新数据。
+
+**注意：由于compound source实际上在第一次请求时是同步执行的，它无法脱离algeb的代数效应环境被异步读取，因此，无法像普通的source一样使用request来进行数据请求（虽然不会报错）。
+
 ### isSource(source)
 
 用于判断一个对象是否为source，返回boolean。

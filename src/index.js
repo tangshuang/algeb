@@ -255,15 +255,22 @@ export function request(source, ...params) {
   }
 
   const { atoms, type } = source
-  if (type !== SOURCE_TYPES.SOURCE) {
-    throw new Error(`[alegb]: request can only work with atom source not compound source.`)
-  }
+  // if (type !== SOURCE_TYPES.SOURCE) {
+  //   throw new Error(`[alegb]: request can only work with atom source not compound source.`)
+  // }
 
   const hash = getObjectHash(params)
   const atom = atoms.find(item => item.hash === hash)
 
+  // 对应的atom还不存在，那么要创建这个atom
+  if (!atom) {
+    query(source, ...params)
+    const atom = atoms.find(item => item.hash === hash)
+    return atom.deferer ? atom.deferer : Promise.resolve(atom.value)
+  }
+
   // 找到对应的原子
-  if (atom && !force) {
+  if (!force) {
     return Promise.resolve(atom.value)
   }
 
