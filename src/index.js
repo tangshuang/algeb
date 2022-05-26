@@ -37,7 +37,7 @@ export function compose(get) {
 export function query(source, ...params) {
   const { type, value } = source
   if (isInitingCompoundSource) {
-    return [value, () => {}]
+    return [value, () => {}, Promise.resolve(value)]
   }
   else if (type === SOURCE_TYPES.SOURCE) {
     return querySource(source, ...params)
@@ -130,11 +130,11 @@ function querySource(source, ...params) {
   item.next = next
 
   // 立即开始请求
-  next()
+  const deferer = next()
   // 加入图中
   host(item)
 
-  return [value, next]
+  return [value, next, deferer]
 }
 
 function queryCompose(source, ...params) {
@@ -194,7 +194,10 @@ function queryCompose(source, ...params) {
   // 加入图中
   host(item)
 
-  return [item.value, broadcast]
+  const deps = item.deps
+  const deferer = Promise.all(deps.map(dep => dep.deferer).filter(item => item)).then(() => item.value)
+
+  return [item.value, broadcast, deferer]
 }
 
 export function setup(run) {
@@ -203,6 +206,7 @@ export function setup(run) {
     root.end = true
   }
   stop.value = null
+  stop.stop = stop
 
   const next = throttle(() => {
     HOSTS_CHAIN.push(root)
@@ -213,6 +217,7 @@ export function setup(run) {
   root.next = next
 
   stop.next = () => {
+    // 还在进行中的，就不需要持续跟进
     if (!atom.end) {
       return
     }
@@ -241,7 +246,6 @@ export function release(sources) {
 
 /**
  * 对一个source发起请求，发起请求时，根据参数信息决定是否使用缓存
- * 注意，这个动作可能会参数副作用，但由于不在step中执行，没有上下文环境，又不会触发hooks，因此，你需要明确这个source在被request时，不被用于代数上下文
  * @param {boolean} [force] true 如果第一个参数为true，表示强制请求该数据源
  * @param {Source} source
  * @param  {...any} params
@@ -262,11 +266,19 @@ export function request(source, ...params) {
   const hash = getObjectHash(params)
   const atom = atoms.find(item => item.hash === hash)
 
+  const run = () => {
+    return new Promise((resolve) => {
+      const stop = setup(() => {
+        const [, renew] = query(source, ...params)
+        resolve(renew())
+      })
+      stop()
+    })
+  }
+
   // 对应的atom还不存在，那么要创建这个atom
   if (!atom) {
-    query(source, ...params)
-    const atom = atoms.find(item => item.hash === hash)
-    return atom.deferer ? atom.deferer : Promise.resolve(atom.value)
+    return run()
   }
 
   // 找到对应的原子
@@ -274,7 +286,7 @@ export function request(source, ...params) {
     return Promise.resolve(atom.value)
   }
 
-  return atom.next()
+  return run()
 }
 
 /**

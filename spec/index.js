@@ -85,3 +85,6 @@ setup(function() {
 
   document.querySelector('#root').innerHTML = html
 })
+
+
+request(true, Book, 200).then(console.log)
