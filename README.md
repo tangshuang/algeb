@@ -128,6 +128,17 @@ const data = await request(source, { id })
 const data = await request(true, source, { id })
 ```
 
+### action(act)
+
+创建一个仅用于处理副作用的source，该source只能被request使用。
+
+```js
+const Update = action(async (bookId, data) => {
+  await patch('/api/books/' + bookId, data) // 提交数据到后台
+  request(true, Book, bookId) // 强制刷新数据
+})
+```
+
 ### isSource(source)
 
 用于判断一个对象是否为source，返回boolean。
