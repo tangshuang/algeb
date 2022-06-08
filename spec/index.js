@@ -53,27 +53,13 @@ const Mix = compose(function(bookId, photoId, requestId) {
       fetchBook()
       fetchPhoto()
       setRequest()
-    }, 2000)
+    }, 5000)
     return () => {
       clearInterval(timer)
     }
   }, [book, photo])
 
   return { book, photo, total, request }
-})
-
-const Update = action((bookId) => {
-  const [, renew] = query(Book, bookId)
-
-  return async (data) => {
-    // submit data
-    await new Promise(r => setTimeout(() => {
-      console.log(data)
-      r()
-    }, 300))
-    // refetch data
-    renew()
-  }
 })
 
 /**
@@ -101,4 +87,10 @@ setup(function() {
 })
 
 
-request(true, Book, 200).then(console.log)
+const Update = action(async (id) => {
+  return await request(true, Book, id)
+})
+
+document.querySelector('#update').addEventListener('click', () => {
+  request(Update, 100).then(console.log)
+})

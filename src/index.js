@@ -3,8 +3,8 @@ import { getObjectHash, isEqual, throttle, isArray } from 'ts-fns'
 export const SOURCE_TYPES = {
   SOURCE: Symbol(1),
   COMPOSE: Symbol(2),
-  ACTION: Symbol(4),
   SETUP: Symbol(3),
+  ACTION: Symbol(4),
 }
 
 const HOSTS_CHAIN = []
@@ -36,12 +36,21 @@ export function compose(get) {
 }
 
 export function action(act) {
-  isInitingSource = true
-  isInitingSource = false
+  const cache = {}
+  const fn = (...args) => {
+    const hash = getObjectHash(args)
+    if (cache[hash]) {
+      return cache[hash]
+    }
+
+    cache[hash] = Promise.resolve(act(...args)).finally(() => {
+      cache[hash] = null
+    })
+    return cache[hash]
+  }
   const source = {
     type: SOURCE_TYPES.ACTION,
-    act,
-    atoms: [],
+    act: fn,
   }
   return source
 }
@@ -57,8 +66,9 @@ export function query(source, ...params) {
   else if (type === SOURCE_TYPES.COMPOSE) {
     return queryCompose(source, ...params)
   }
-  else if (type === SOURCE_TYPES.ACTION) {
-    return queryAction(source, ...params)
+  // 不提供query能力
+  else {
+    return [value, () => {}, Promise.resolve(value)]
   }
 }
 
@@ -208,72 +218,6 @@ function queryCompose(source, ...params) {
   return [item.value, broadcast, deferer]
 }
 
-/**
- *
- * @param {*} source
- * @param  {...any} params
- * @returns
- * @example
- * ajax('xxx', postData).then((data) => {
- *   const { id } = data
- *   ajax(id).then((value) => {
- *     setState(value)
- *   })
- * })
- *
- * const a = action(async (postData) => {
- *   await ajax('xxx', postData)
- * }, (data) => {
- *   const { id } = data
- *   query(source, id)
- * })
- */
-function queryAction(source, ...params) {
-  const { atoms, act } = source
-  const hash = getObjectHash(params)
-  let atom = atoms.find(item => item.hash === hash)
-
-  if (!atom) {
-    HOSTS_CHAIN.push(item)
-    const fn = act(...params)
-    HOSTS_CHAIN.pop()
-    HOOKS_CHAIN.length = 0 // clear hooks list
-
-    const item = { hash, deps: [], hooks: [], fn }
-
-    // 相同参数，只会在同一时间执行一次
-    const defering = {}
-    item.submit = (...args) => {
-      const hash = getObjectHash(args)
-      if (defering[hash]) {
-        return defering[hash]
-      }
-
-      return Promise.resolve(fn(...args)).then(() => {
-        emit(item)
-      }).finally(() => {
-        delete defering[hash]
-      })
-    }
-
-    // 仅作为内部冒泡用，不提供给外面人用
-    item.next = () => {
-      emit(item)
-    }
-
-    // 生成必备的内容
-    atoms.push(item)
-
-    // 加入图中
-    host(item)
-
-    // 给值
-    atom = item
-  }
-
-  return [atom.submit, atom.next, Promise.resolve()]
-}
-
 // 解除全部effects，避免内存泄露
 const traverseFree = (host) => {
   if (host.hooks) {
@@ -349,6 +293,11 @@ export function request(source, ...params) {
   }
 
   const { atoms, type } = source
+
+  if (type === SOURCE_TYPES.ACTION) {
+    return source.act(...params)
+  }
+
   // if (type !== SOURCE_TYPES.SOURCE) {
   //   throw new Error(`[alegb]: request can only work with atom source not compound source.`)
   // }
@@ -361,11 +310,6 @@ export function request(source, ...params) {
       })
       stop()
     })
-  }
-
-  // action不需要任何缓存逻辑，直接发起请求
-  if (type === SOURCE_TYPES.ACTION) {
-    return run()
   }
 
   const hash = getObjectHash(params)
