@@ -3,13 +3,14 @@ import { getObjectHash, isEqual, throttle, isArray } from 'ts-fns'
 export const SOURCE_TYPES = {
   SOURCE: Symbol(1),
   COMPOSE: Symbol(2),
+  ACTION: Symbol(4),
   SETUP: Symbol(3),
 }
 
 const HOSTS_CHAIN = []
 const HOOKS_CHAIN = []
 
-let isInitingCompoundSource = false
+let isInitingSource = false
 
 export function source(get, value) {
   const source = {
@@ -22,9 +23,9 @@ export function source(get, value) {
 }
 
 export function compose(get) {
-  isInitingCompoundSource = true
+  isInitingSource = true
   const value = get()
-  isInitingCompoundSource = false
+  isInitingSource = false
   const source = {
     type: SOURCE_TYPES.COMPOSE,
     get,
@@ -34,9 +35,20 @@ export function compose(get) {
   return source
 }
 
+export function action(act) {
+  isInitingSource = true
+  isInitingSource = false
+  const source = {
+    type: SOURCE_TYPES.ACTION,
+    act,
+    atoms: [],
+  }
+  return source
+}
+
 export function query(source, ...params) {
   const { type, value } = source
-  if (isInitingCompoundSource) {
+  if (isInitingSource) {
     return [value, () => {}, Promise.resolve(value)]
   }
   else if (type === SOURCE_TYPES.SOURCE) {
@@ -44,6 +56,9 @@ export function query(source, ...params) {
   }
   else if (type === SOURCE_TYPES.COMPOSE) {
     return queryCompose(source, ...params)
+  }
+  else if (type === SOURCE_TYPES.ACTION) {
+    return queryAction(source, ...params)
   }
 }
 
@@ -63,6 +78,7 @@ const emit = (atom) => {
   })
 }
 
+// 附加到当前宿主
 const host = (atom) => {
   const host = HOSTS_CHAIN[HOSTS_CHAIN.length - 1]
 
@@ -88,49 +104,38 @@ function querySource(source, ...params) {
   // 找到对应的原子
   if (atom) {
     host(atom)
-    return [atom.value, atom.next]
+    return [atom.value, atom.next, atom.deferer]
   }
 
   // 默认原子
   const item = { hash, value }
-  atoms.push(item)
 
   const next = () => {
-    if (item.deferer) {
+    if (item.defering) {
       return item.deferer
     }
 
     const res = get(...params)
-
-    if (res instanceof Promise) {
-      item.deferer = res
-        .then((value) => {
-          item.value = value
-          emit(item)
-          return value
-        })
-        .finally(() => {
-          item.deferer = null
-        })
-      return item.deferer
-    }
-
-    // 如果是同步函数，会立即把值计算出来，这样就不需要在做一次更新
-    item.deferer = Promise.resolve()
-      .then(() => {
-        item.value = res
+    item.defering = 1
+    item.deferer = Promise.resolve(res)
+      .then((value) => {
+        item.value = value
         emit(item)
         return res
       })
       .finally(() => {
-        item.deferer = null
+        item.defering = 0
       })
+
     return item.deferer
   }
   item.next = next
 
   // 立即开始请求
   const deferer = next()
+  // 生成好了next, deferer, defering
+  atoms.push(item)
+
   // 加入图中
   host(item)
 
@@ -144,11 +149,10 @@ function queryCompose(source, ...params) {
 
   if (atom) {
     host(atom)
-    return [atom.value, atom.broadcast]
+    return [atom.value, atom.broadcast, atom.deferer]
   }
 
   const item = { hash, value, deps: [], hooks: [] }
-  atoms.push(item)
 
   const run = () => {
     HOSTS_CHAIN.push(item)
@@ -191,19 +195,104 @@ function queryCompose(source, ...params) {
 
   // 立即计算
   run(item)
+
+  // 生成必备的内容
+  atoms.push(item)
+
   // 加入图中
   host(item)
 
   const deps = item.deps
-  const deferer = Promise.all(deps.map(dep => dep.deferer).filter(item => item)).then(() => item.value)
+  const deferer = Promise.all(deps.filter(dep => dep.deferer).map(dep => dep.deferer)).then(() => item.value)
 
   return [item.value, broadcast, deferer]
+}
+
+/**
+ *
+ * @param {*} source
+ * @param  {...any} params
+ * @returns
+ * @example
+ * ajax('xxx', postData).then((data) => {
+ *   const { id } = data
+ *   ajax(id).then((value) => {
+ *     setState(value)
+ *   })
+ * })
+ *
+ * const a = action(async (postData) => {
+ *   await ajax('xxx', postData)
+ * }, (data) => {
+ *   const { id } = data
+ *   query(source, id)
+ * })
+ */
+function queryAction(source, ...params) {
+  const { atoms, act } = source
+  const hash = getObjectHash(params)
+  let atom = atoms.find(item => item.hash === hash)
+
+  if (!atom) {
+    HOSTS_CHAIN.push(item)
+    const fn = act(...params)
+    HOSTS_CHAIN.pop()
+    HOOKS_CHAIN.length = 0 // clear hooks list
+
+    const item = { hash, deps: [], hooks: [], fn }
+
+    // 相同参数，只会在同一时间执行一次
+    const defering = {}
+    item.submit = (...args) => {
+      const hash = getObjectHash(args)
+      if (defering[hash]) {
+        return defering[hash]
+      }
+
+      return Promise.resolve(fn(...args)).then(() => {
+        emit(item)
+      }).finally(() => {
+        delete defering[hash]
+      })
+    }
+
+    // 仅作为内部冒泡用，不提供给外面人用
+    item.next = () => {
+      emit(item)
+    }
+
+    // 生成必备的内容
+    atoms.push(item)
+
+    // 加入图中
+    host(item)
+
+    // 给值
+    atom = item
+  }
+
+  return [atom.submit, atom.next, Promise.resolve()]
+}
+
+// 解除全部effects，避免内存泄露
+const traverseFree = (host) => {
+  if (host.hooks) {
+    host.hooks.forEach(({ revoke }) => {
+      revoke && revoke()
+    })
+  }
+  if (host.deps) {
+    host.deps.forEach((dep) => {
+      traverseFree(dep)
+    })
+  }
 }
 
 export function setup(run) {
   const root = { deps: [], hooks: [], root: true }
   const stop = () => {
     root.end = true
+    traverseFree(root)
   }
   stop.value = null
   stop.stop = stop
@@ -240,6 +329,7 @@ export function release(sources) {
   }
 
   sources.forEach((source) => {
+    source.atoms.forEach(traverseFree)
     source.atoms = []
   })
 }
@@ -263,9 +353,6 @@ export function request(source, ...params) {
   //   throw new Error(`[alegb]: request can only work with atom source not compound source.`)
   // }
 
-  const hash = getObjectHash(params)
-  const atom = atoms.find(item => item.hash === hash)
-
   const run = () => {
     return new Promise((resolve) => {
       const stop = setup(() => {
@@ -275,6 +362,14 @@ export function request(source, ...params) {
       stop()
     })
   }
+
+  // action不需要任何缓存逻辑，直接发起请求
+  if (type === SOURCE_TYPES.ACTION) {
+    return run()
+  }
+
+  const hash = getObjectHash(params)
+  const atom = atoms.find(item => item.hash === hash)
 
   // 对应的atom还不存在，那么要创建这个atom
   if (!atom) {
@@ -301,7 +396,7 @@ export function isSource(source) {
 // hooks -------------
 
 export function affect(invoke, deps) {
-  if (isInitingCompoundSource) {
+  if (isInitingSource) {
     return
   }
 
@@ -330,7 +425,7 @@ export function affect(invoke, deps) {
 }
 
 export function select(compute, deps) {
-  if (isInitingCompoundSource) {
+  if (isInitingSource) {
     const value = compute()
     return value
   }
@@ -365,7 +460,7 @@ export function select(compute, deps) {
 }
 
 export function apply(get, value) {
-  if (isInitingCompoundSource) {
+  if (isInitingSource) {
     return () => [value, () => {}]
   }
 
@@ -389,7 +484,7 @@ export function apply(get, value) {
 }
 
 export function ref(value) {
-  if (isInitingCompoundSource) {
+  if (isInitingSource) {
     return { value }
   }
 

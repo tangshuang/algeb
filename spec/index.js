@@ -1,4 +1,4 @@
-import { source, query, compose, affect, setup, apply, ref, select, request } from '../src/index.js'
+import { source, query, compose, affect, setup, apply, ref, select, request, action } from '../src/index.js'
 
 
 /**
@@ -60,6 +60,20 @@ const Mix = compose(function(bookId, photoId, requestId) {
   }, [book, photo])
 
   return { book, photo, total, request }
+})
+
+const Update = action((bookId) => {
+  const [, renew] = query(Book, bookId)
+
+  return async (data) => {
+    // submit data
+    await new Promise(r => setTimeout(() => {
+      console.log(data)
+      r()
+    }, 300))
+    // refetch data
+    renew()
+  }
 })
 
 /**
