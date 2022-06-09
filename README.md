@@ -45,15 +45,15 @@ const Book = source(async function(bookId) {
 获取源数据。
 
 ```js
-const [book, fetchBook] = query(Book, bookId)
+const [book, refetch, deferer] = query(Book, bookId)
 ```
 
-我们得到一个只有两个值的数组，第一个值是当前Book的真实数据，第二个值是重新获取最新的数据的触发函数（该触发函数只触发请求，不返回结果）。
+我们得到一个只有3个值的数组，第一个值是当前Book的真实数据，第二个值是重新获取最新的数据的触发函数（该触发函数只触发请求，不返回结果），第三个值是请求过程的deferer，可用于判断是否还在处于请求状态中。
 
 - Source 由`source`或`compose`创建的源。
 - params 传给`source`或`compose`第一个参数函数的参数。
 
-下文会在`setup`部分详细讲`fetchBook`的运行机制。
+下文会在`setup`部分详细讲`refetch`的运行机制。
 
 ### setup(fn)
 
@@ -61,20 +61,20 @@ const [book, fetchBook] = query(Book, bookId)
 
 ```js
 setup(function() {
-  const [book, fetchBook] = query(Book, bookId)
+  const [book, refetch] = query(Book, bookId)
 
   render`
     <div>
       <span>${book.title}</span>
       <span>${book.price}</span>
-      <button onclick="${fetchBook}">refresh</button>
+      <button onclick="${refetch}">refresh</button>
     </div>
   `
 })
 ```
 
-当执行该语句之后，setup中的函数会被执行。当fetchBook函数被调用，触发数据请求，当数据请求完成后，setup中断函数会被再次执行。
-`setup`的fn必须是同步函数，在第一次执行query时，由于请求刚刚发出，会使用default作为值返回。
+当执行该语句之后，setup中的函数会被执行。当refetch函数被调用，触发数据请求，当数据请求完成后，setup中断函数会被再次执行。
+`setup`的fn必须是同步函数，在第一次执行query时，由于请求刚刚发出，还没有真实值，因此会使用default作为默认值返回。
 
 这就是 Algeb 的执行机制：通过触发数据源的重新请求，在得到新数据之后，重新执行setup中的函数，从而实现副作用的反复执行。'
 
@@ -92,13 +92,13 @@ setup返回stop函数，同时，它包含3个静态属性：
 
 ```js
 const ctx = setup(() => {
-  const [book, fetchBook] = query(Book, bookId)
+  const [book, refetch] = query(Book, bookId)
 
   render`
     <div>
       <span>${book.title}</span>
       <span>${book.price}</span>
-      <button onclick="${fetchBook}">refresh</button>
+      <button onclick="${refetch}">refresh</button>
     </div>
   `
 
@@ -139,7 +139,7 @@ const Update = action(async (bookId, data) => {
 })
 ```
 
-### isSource(source)
+### isSource(value)
 
 用于判断一个对象是否为source，返回boolean。
 
@@ -184,11 +184,11 @@ const Mix = compose(function(bookId, photoId) {
 })
 ```
 
-我们可以同时组合多个源，组合函数必须是同步函数。组合函数返回组合后的复杂对象，还可以在内部提供一些特殊逻辑，比如上面的代码中，规定了每5秒钟更新数据源。
+我们可以同时组合多个源，获得一个“复合源”（Compound Source），组合函数必须是同步函数。组合函数返回组合后的复杂对象，还可以在内部提供一些特殊逻辑，比如上面的代码中，规定了每5秒钟更新数据源。
 
 在compose组合函数中，你可以使用hooks（下方详解，source中不可以使用hooks），也可以query其他Compound Source。总之，compose组合其他源，同时可以使用hooks对不同源之间的重新计算逻辑进行逻辑处理。
 
-它返回最终生成的“复合源”（Compound Source），它和source生产的源一样，可以被query使用，不同的是，query返回的第二个值（函数）将触发组合内所有被依赖源全部重新请求新数据。
+它返回最终生成的“复合源”（Compound Source），它和source生产的源一样，可以被query使用，不同的是，query它返回的第二个值（函数）将触发组合内所有被依赖源全部重新请求新数据。
 
 ```js
 const [mix, updateMix] = query(Mix)
