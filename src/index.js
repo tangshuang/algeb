@@ -1,4 +1,4 @@
-import { getObjectHash, isEqual, throttle, isArray } from 'ts-fns'
+import { getObjectHash, isEqual, isArray } from 'ts-fns'
 
 export const SOURCE_TYPES = {
   SOURCE: Symbol(1),
@@ -227,6 +227,11 @@ const traverseFree = (host) => {
   }
   if (host.deps) {
     host.deps.forEach((dep) => {
+      dep.hosts.forEach((item, i) => {
+        if (item === host) {
+          dep.hosts.splice(i, 1)
+        }
+      })
       traverseFree(dep)
     })
   }
@@ -241,12 +246,37 @@ export function setup(run) {
   stop.value = null
   stop.stop = stop
 
-  const next = throttle(() => {
+  /**
+   * 下面做一个队列的目的，一方面是为了减少副作用执行的频率，另一方面是为了保证每个执行不被丢弃
+   */
+  const queue = []
+  const doit = () => {
     HOSTS_CHAIN.push(root)
     stop.value = run()
     // HOSTS_CHAIN.pop()
     HOOKS_CHAIN.length = 0 // clear hooks list
-  }, 10)
+  }
+  let timer;
+  const next = () => {
+    const now = Date.now()
+    queue.push(now)
+
+    // 在8ms内如果再次被执行，那么只会做最后一次，且有8ms延时
+    clearTimeout(timer)
+    timer = setTimeout(() => {
+      if (queue.length) {
+        doit()
+        queue.length = 0
+      }
+    }, 8)
+
+    // 如果反复的被执行，那么这个8ms会被无限拖延，因此，需要做一个判断
+    // 当第一次被推入队列的时间，已经离当前时间较为久远了，那么，就直接执行它，而不需要再等待了
+    if (queue.length > 1 && now > queue[0] + 8) {
+      doit()
+      queue.length = 0
+    }
+  }
   root.next = next
 
   stop.next = () => {
