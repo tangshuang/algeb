@@ -292,8 +292,13 @@ export function release(sources) {
  */
 export function request(source, ...params) {
   let force = false
+  let nocache = false
   if (source === true) {
     force = true
+    source = params.shift()
+  }
+  else if (source === false) {
+    nocache = true
     source = params.shift()
   }
 
@@ -319,15 +324,13 @@ export function request(source, ...params) {
     return run()
   }
 
-  if (HOSTS_CHAIN.some(item => item.root)) {
+  // 当传false时，表示不走algeb的整套机制
+  // 当request被用在setup中时，也不走整套机制，否则会导致无法正确写入HOSTS_CHAIN问题
+  if (nocache || HOSTS_CHAIN.some(item => item.root)) {
     if (type !== SOURCE_TYPES.SOURCE) {
       throw new Error(`[alegb]: request here can only work with atom source, can not with compound source.`)
     }
-    const run = () => {
-      const [, renew] = querySource(source, ...params)
-      return renew()
-    }
-    return resolve(run)
+    return Promise.resolve(source.get(...params))
   }
 
   const run = () => {
