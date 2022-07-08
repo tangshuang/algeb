@@ -251,8 +251,10 @@ export function setup(run) {
     stop.value = run()
     // HOSTS_CHAIN.pop()
     HOOKS_CHAIN.length = 0 // clear hooks list
+    emit(root)
   }
   root.next = next
+  host(root)
 
   stop.next = () => {
     // 还在进行中的，就不需要持续跟进
