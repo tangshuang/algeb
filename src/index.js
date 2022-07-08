@@ -58,7 +58,7 @@ export function action(act) {
 export function query(source, ...params) {
   const { type, value } = source
   if (isInitingSource) {
-    return [value, () => {}, Promise.resolve(value)]
+    return [value, () => Promise.resolve(value), Promise.resolve(value)]
   }
   else if (type === SOURCE_TYPES.SOURCE) {
     return querySource(source, ...params)
@@ -68,7 +68,7 @@ export function query(source, ...params) {
   }
   // 不提供query能力
   else {
-    return [value, () => {}, Promise.resolve(value)]
+    return [value, () => Promise.resolve(value), Promise.resolve(value)]
   }
 }
 
@@ -251,10 +251,8 @@ export function setup(run) {
     stop.value = run()
     // HOSTS_CHAIN.pop()
     HOOKS_CHAIN.length = 0 // clear hooks list
-    emit(root)
   }
   root.next = next
-  host(root)
 
   stop.next = () => {
     // 还在进行中的，就不需要持续跟进
@@ -287,7 +285,7 @@ export function release(sources) {
 
 /**
  * 对一个source发起请求，发起请求时，根据参数信息决定是否使用缓存
- * @param {boolean} [force] true 如果第一个参数为true，表示强制请求该数据源
+ * @param {boolean} [force] true 如果第一个参数为true，表示强制请求该数据源，如果为false
  * @param {Source} source
  * @param  {...any} params
  * @returns {Promise}
@@ -305,9 +303,32 @@ export function request(source, ...params) {
     return source.act(...params)
   }
 
-  // if (type !== SOURCE_TYPES.SOURCE) {
-  //   throw new Error(`[alegb]: request can only work with atom source not compound source.`)
-  // }
+  const hash = getObjectHash(params)
+  const atom = atoms.find(item => item.hash === hash)
+
+  const resolve = (run) => {
+    // 对应的atom还不存在，那么要创建这个atom
+    if (!atom) {
+      return run()
+    }
+    // 找到对应的原子，使用缓存
+    if (!force) {
+      return Promise.resolve(atom.value)
+    }
+    // 找到对应原子，但强制更新
+    return run()
+  }
+
+  if (HOSTS_CHAIN.some(item => item.root)) {
+    if (type !== SOURCE_TYPES.SOURCE) {
+      throw new Error(`[alegb]: request here can only work with atom source, can not with compound source.`)
+    }
+    const run = () => {
+      const [, renew] = querySource(source, ...params)
+      return renew()
+    }
+    return resolve(run)
+  }
 
   const run = () => {
     return new Promise((resolve) => {
@@ -318,21 +339,7 @@ export function request(source, ...params) {
       stop()
     })
   }
-
-  const hash = getObjectHash(params)
-  const atom = atoms.find(item => item.hash === hash)
-
-  // 对应的atom还不存在，那么要创建这个atom
-  if (!atom) {
-    return run()
-  }
-
-  // 找到对应的原子
-  if (!force) {
-    return Promise.resolve(atom.value)
-  }
-
-  return run()
+  return resolve(run)
 }
 
 /**
@@ -412,7 +419,7 @@ export function select(compute, deps) {
 
 export function apply(get, value) {
   if (isInitingSource) {
-    return () => [value, () => {}]
+    return () => [value, () => Promise.resolve(value)]
   }
 
   const host = HOSTS_CHAIN[HOSTS_CHAIN.length - 1]
