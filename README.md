@@ -116,17 +116,14 @@ setInterval(() => {
 
 ### request(source, ...params)
 
-基于source发起请求，返回一个Promise，返回结果将会根据对应参数是否被请求过进行返回，如果已经请求过，则会返回之前请求的结果。
+你可以用request，把source转化为类似一个普通的ajax请求一样来使用。
+基于source发起请求，返回一个基于新请求的Promise，即使这个source之前已经被请求过了，新的请求还是会被发出，并更新本地数据。
 
 ```js
 const data = await request(source, { id })
 ```
 
-在一般情况下，它会直接返回当前数据。如果你希望强制拉取最新数据，可以在第一个参数之前再插入一个参数`true`来强制拉取最新数据。
-
-```js
-const data = await request(true, source, { id })
-```
+请求完成时，对应参数的结构将会被放入仓库中，并触发对应的setup。
 
 ### action(act)
 
@@ -135,7 +132,7 @@ const data = await request(true, source, { id })
 ```js
 const Update = action(async (bookId, data) => {
   await patch('/api/books/' + bookId, data) // 提交数据到后台
-  request(true, Book, bookId) // 强制刷新数据
+  request(Book, bookId) // 强制刷新数据
 })
 ```
 

@@ -284,65 +284,40 @@ export function release(sources) {
 }
 
 /**
- * 对一个source发起请求，发起请求时，根据参数信息决定是否使用缓存
- * @param {boolean} [force] true 如果第一个参数为true，表示强制请求该数据源，如果为false
+ * 对一个source发起请求，get函数一定会被运行，新的结果会更新已有的缓存，并触发响应的setup
  * @param {Source} source
  * @param  {...any} params
  * @returns {Promise}
  */
 export function request(source, ...params) {
-  let force = false
-  let nocache = false
-  if (source === true) {
-    force = true
-    source = params.shift()
-  }
-  else if (source === false) {
-    nocache = true
-    source = params.shift()
-  }
-
-  const { atoms, type } = source
+  const { type } = source
 
   if (type === SOURCE_TYPES.ACTION) {
-    return source.act(...params)
+    return Promise.resolve(source.act(...params))
   }
 
-  const hash = getObjectHash(params)
-  const atom = atoms.find(item => item.hash === hash)
-
-  const resolve = (run) => {
-    // 对应的atom还不存在，那么要创建这个atom
-    if (!atom) {
-      return run()
-    }
-    // 找到对应的原子，使用缓存
-    if (!force) {
-      return Promise.resolve(atom.value)
-    }
-    // 找到对应原子，但强制更新
-    return run()
-  }
-
-  // 当传false时，表示不走algeb的整套机制
   // 当request被用在setup中时，也不走整套机制，否则会导致无法正确写入HOSTS_CHAIN问题
-  if (nocache || HOSTS_CHAIN.some(item => item.root)) {
+  // 举个例子
+  // const srcA = source(...)
+  // const srcB = source(...)
+  // const src = source(() => Promise.all(request(srcA), request(srcB))) // 注意此处用了request
+  // setup(() => { query(src) }) // 此时在query时，内部会调用request，如果走algeb机制，就导致request内部还有setup
+  // 所以在遇到这种情况的时候，就把request当作普通的请求处理
+  if (HOSTS_CHAIN.some(item => item.root)) {
     if (type !== SOURCE_TYPES.SOURCE) {
       throw new Error(`[alegb]: request here can only work with atom source, can not with compound source.`)
     }
     return Promise.resolve(source.get(...params))
   }
 
-  const run = () => {
-    return new Promise((resolve) => {
-      const stop = setup(() => {
-        const [, renew] = query(source, ...params)
-        resolve(renew())
-      })
-      stop()
+  return new Promise((resolve) => {
+    const stop = setup(() => {
+      const [, renew] = query(source, ...params)
+      // 会发出新的请求
+      resolve(renew())
     })
-  }
-  return resolve(run)
+    stop()
+  })
 }
 
 /**
