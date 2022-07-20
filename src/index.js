@@ -168,8 +168,7 @@ function queryCompose(source, ...params) {
     HOSTS_CHAIN.push(item)
     const value = get(...params)
     item.value = value
-    HOSTS_CHAIN.pop()
-    HOOKS_CHAIN.length = 0 // clear hooks list
+    HOOKS_CHAIN.pop()
   }
 
   const next = () => {
@@ -249,8 +248,7 @@ export function setup(run) {
   const next = () => {
     HOSTS_CHAIN.push(root)
     stop.value = run()
-    // HOSTS_CHAIN.pop()
-    HOOKS_CHAIN.length = 0 // clear hooks list
+    HOOKS_CHAIN.pop()
   }
   root.next = next
 
