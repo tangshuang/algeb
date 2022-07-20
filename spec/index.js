@@ -1,4 +1,4 @@
-import { source, query, compose, affect, setup, apply, ref, select, request, action } from '../src/index.js'
+import { source, query, compose, affect, setup, apply, ref, select, renew, request, action } from '../src/index.js'
 
 
 /**
@@ -88,9 +88,13 @@ setup(function() {
 
 
 const Update = action(async (id) => {
-  return await request(true, Book, id)
+  return await renew(Book, id)
 })
 
 document.querySelector('#update').addEventListener('click', () => {
-  request(Update, 100).then(console.log)
+  request(Update, 100)
+})
+
+document.querySelector('#renew').addEventListener('click', () => {
+  renew(Book, 100)
 })

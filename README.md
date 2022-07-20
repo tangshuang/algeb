@@ -112,6 +112,8 @@ setInterval(() => {
 
 ## 非代数效应用法
 
+以下方法都不应该在setup内部被调用。
+
 ### action(act)
 
 创建一个仅用于处理副作用的source，该source只能被request使用。

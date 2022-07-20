@@ -1,10 +1,10 @@
-import { getObjectHash, isEqual, isArray } from 'ts-fns'
+import { getObjectHash, isEqual, isArray, uniqueArray } from 'ts-fns'
 
 export const SOURCE_TYPES = {
-  SOURCE: Symbol(1),
-  COMPOSE: Symbol(2),
-  SETUP: Symbol(3),
-  ACTION: Symbol(4),
+  SOURCE: Symbol('source'),
+  COMPOSE: Symbol('compose'),
+  SETUP: Symbol('setup'),
+  ACTION: Symbol('action'),
 }
 
 const HOSTS_CHAIN = []
@@ -60,15 +60,14 @@ export function query(source, ...params) {
   if (isInitingSource) {
     return [value, () => Promise.resolve(value), Promise.resolve(value)]
   }
-  else if (type === SOURCE_TYPES.SOURCE) {
+  if (type === SOURCE_TYPES.SOURCE) {
     return querySource(source, ...params)
   }
-  else if (type === SOURCE_TYPES.COMPOSE) {
+  if (type === SOURCE_TYPES.COMPOSE) {
     return queryCompose(source, ...params)
   }
-  // 不提供query能力
-  else {
-    return [value, () => Promise.resolve(value), Promise.resolve(value)]
+  if (type === SOURCE_TYPES.ACTION) {
+    throw new Error(`[alegb]: action不能用在query中，只能用在request中，query只能使用source.`)
   }
 }
 
@@ -168,7 +167,7 @@ function queryCompose(source, ...params) {
     HOSTS_CHAIN.push(item)
     const value = get(...params)
     item.value = value
-    HOOKS_CHAIN.pop()
+    HOSTS_CHAIN.pop()
   }
 
   const next = () => {
@@ -247,8 +246,10 @@ export function setup(run) {
 
   const next = () => {
     HOSTS_CHAIN.push(root)
+    HOOKS_CHAIN.length = 0
     stop.value = run()
-    HOOKS_CHAIN.pop()
+    HOSTS_CHAIN.length = 0
+    HOOKS_CHAIN.length = 0
   }
   root.next = next
 
@@ -258,7 +259,7 @@ export function setup(run) {
       return
     }
     root.end = false
-    next()
+    return next()
   }
 
   next()
@@ -288,20 +289,9 @@ export function release(sources) {
  * @returns
  */
 export function renew(source, ...params) {
-  const { type } = source
-
-  if (type === SOURCE_TYPES.ACTION) {
-    throw new Error(`[alegb]: action不能用在renew中，只能使用source.`)
-  }
-
-  return new Promise((resolve) => {
-    const stop = setup(() => {
-      const [, renew] = query(source, ...params)
-      // 会发出新的请求
-      resolve(renew())
-    })
-    stop()
-  })
+  const [, renew] = query(source, ...params)
+  // 会发出新的请求
+  return renew()
 }
 
 /**
