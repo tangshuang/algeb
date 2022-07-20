@@ -1,4 +1,4 @@
-import { getObjectHash, isEqual, throttle, isArray } from 'ts-fns'
+import { getObjectHash, isEqual, isArray } from 'ts-fns'
 
 export const SOURCE_TYPES = {
   SOURCE: Symbol(1),
@@ -58,7 +58,7 @@ export function action(act) {
 export function query(source, ...params) {
   const { type, value } = source
   if (isInitingSource) {
-    return [value, () => {}, Promise.resolve(value)]
+    return [value, () => Promise.resolve(value), Promise.resolve(value)]
   }
   else if (type === SOURCE_TYPES.SOURCE) {
     return querySource(source, ...params)
@@ -68,7 +68,7 @@ export function query(source, ...params) {
   }
   // 不提供query能力
   else {
-    return [value, () => {}, Promise.resolve(value)]
+    return [value, () => Promise.resolve(value), Promise.resolve(value)]
   }
 }
 
@@ -168,8 +168,7 @@ function queryCompose(source, ...params) {
     HOSTS_CHAIN.push(item)
     const value = get(...params)
     item.value = value
-    HOSTS_CHAIN.pop()
-    HOOKS_CHAIN.length = 0 // clear hooks list
+    HOOKS_CHAIN.pop()
   }
 
   const next = () => {
@@ -227,6 +226,11 @@ const traverseFree = (host) => {
   }
   if (host.deps) {
     host.deps.forEach((dep) => {
+      dep.hosts.forEach((item, i) => {
+        if (item === host) {
+          dep.hosts.splice(i, 1)
+        }
+      })
       traverseFree(dep)
     })
   }
@@ -241,12 +245,11 @@ export function setup(run) {
   stop.value = null
   stop.stop = stop
 
-  const next = throttle(() => {
+  const next = () => {
     HOSTS_CHAIN.push(root)
     stop.value = run()
-    // HOSTS_CHAIN.pop()
-    HOOKS_CHAIN.length = 0 // clear hooks list
-  }, 10)
+    HOOKS_CHAIN.pop()
+  }
   root.next = next
 
   stop.next = () => {
@@ -279,53 +282,26 @@ export function release(sources) {
 }
 
 /**
- * 对一个source发起请求，发起请求时，根据参数信息决定是否使用缓存
- * @param {boolean} [force] true 如果第一个参数为true，表示强制请求该数据源
- * @param {Source} source
+ * 更新数据，在不需要获取数据的情况下，可以通过renew更新数据
+ * @param {*} source
  * @param  {...any} params
- * @returns {Promise}
+ * @returns
  */
-export function request(source, ...params) {
-  let force = false
-  if (source === true) {
-    force = true
-    source = params.shift()
-  }
-
-  const { atoms, type } = source
+export function renew(source, ...params) {
+  const { type } = source
 
   if (type === SOURCE_TYPES.ACTION) {
-    return source.act(...params)
+    throw new Error(`[alegb]: action不能用在renew中，只能使用source.`)
   }
 
-  // if (type !== SOURCE_TYPES.SOURCE) {
-  //   throw new Error(`[alegb]: request can only work with atom source not compound source.`)
-  // }
-
-  const run = () => {
-    return new Promise((resolve) => {
-      const stop = setup(() => {
-        const [, renew] = query(source, ...params)
-        resolve(renew())
-      })
-      stop()
+  return new Promise((resolve) => {
+    const stop = setup(() => {
+      const [, renew] = query(source, ...params)
+      // 会发出新的请求
+      resolve(renew())
     })
-  }
-
-  const hash = getObjectHash(params)
-  const atom = atoms.find(item => item.hash === hash)
-
-  // 对应的atom还不存在，那么要创建这个atom
-  if (!atom) {
-    return run()
-  }
-
-  // 找到对应的原子
-  if (!force) {
-    return Promise.resolve(atom.value)
-  }
-
-  return run()
+    stop()
+  })
 }
 
 /**
@@ -335,6 +311,26 @@ export function request(source, ...params) {
  */
 export function isSource(source) {
   return Object.values(SOURCE_TYPES).includes(source && source.type)
+}
+
+/**
+ * 将source退格为普通的ajax请求
+ * @param {Source} source
+ * @param  {...any} params
+ * @returns {Promise}
+ */
+ export function request(source, ...params) {
+  const { type } = source
+
+  if (type === SOURCE_TYPES.ACTION) {
+    return Promise.resolve(source.act(...params))
+  }
+
+  if (type === SOURCE_TYPES.SOURCE) {
+    return Promise.resolve(source.get(...params))
+  }
+
+  throw new Error(`[alegb]: request只能使用action和原子source，不能使用复合source`);
 }
 
 // hooks -------------
@@ -405,7 +401,7 @@ export function select(compute, deps) {
 
 export function apply(get, value) {
   if (isInitingSource) {
-    return () => [value, () => {}]
+    return () => [value, () => Promise.resolve(value)]
   }
 
   const host = HOSTS_CHAIN[HOSTS_CHAIN.length - 1]
