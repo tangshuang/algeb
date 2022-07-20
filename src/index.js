@@ -284,30 +284,16 @@ export function release(sources) {
 }
 
 /**
- * 对一个source发起请求，get函数一定会被运行，新的结果会更新已有的缓存，并触发响应的setup
- * @param {Source} source
+ * 更新数据，在不需要获取数据的情况下，可以通过renew更新数据
+ * @param {*} source
  * @param  {...any} params
- * @returns {Promise}
+ * @returns
  */
-export function request(source, ...params) {
+export function renew(source, ...params) {
   const { type } = source
 
   if (type === SOURCE_TYPES.ACTION) {
-    return Promise.resolve(source.act(...params))
-  }
-
-  // 当request被用在setup中时，也不走整套机制，否则会导致无法正确写入HOSTS_CHAIN问题
-  // 举个例子
-  // const srcA = source(...)
-  // const srcB = source(...)
-  // const src = source(() => Promise.all(request(srcA), request(srcB))) // 注意此处用了request
-  // setup(() => { query(src) }) // 此时在query时，内部会调用request，如果走algeb机制，就导致request内部还有setup
-  // 所以在遇到这种情况的时候，就把request当作普通的请求处理
-  if (HOSTS_CHAIN.some(item => item.root)) {
-    if (type !== SOURCE_TYPES.SOURCE) {
-      throw new Error(`[alegb]: request here can only work with atom source, can not with compound source.`)
-    }
-    return Promise.resolve(source.get(...params))
+    throw new Error(`[alegb]: action不能用在renew中，只能使用source.`)
   }
 
   return new Promise((resolve) => {
@@ -327,6 +313,26 @@ export function request(source, ...params) {
  */
 export function isSource(source) {
   return Object.values(SOURCE_TYPES).includes(source && source.type)
+}
+
+/**
+ * 将source退格为普通的ajax请求
+ * @param {Source} source
+ * @param  {...any} params
+ * @returns {Promise}
+ */
+ export function request(source, ...params) {
+  const { type } = source
+
+  if (type === SOURCE_TYPES.ACTION) {
+    return Promise.resolve(source.act(...params))
+  }
+
+  if (type === SOURCE_TYPES.SOURCE) {
+    return Promise.resolve(source.get(...params))
+  }
+
+  throw new Error(`[alegb]: request只能使用action和原子source，不能使用复合source`);
 }
 
 // hooks -------------

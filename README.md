@@ -112,19 +112,6 @@ setInterval(() => {
 
 ## 非代数效应用法
 
-前面的用法是比较前卫。此外，你可以使用下面接口，实现一些比较传统的操作：
-
-### request(source, ...params)
-
-你可以用request，把source转化为类似一个普通的ajax请求一样来使用。
-基于source发起请求，返回一个基于新请求的Promise，即使这个source之前已经被请求过了，新的请求还是会被发出，并更新本地数据。
-
-```js
-const data = await request(source, { id })
-```
-
-请求完成时，对应参数的结构将会被放入仓库中，并触发对应的setup。
-
 ### action(act)
 
 创建一个仅用于处理副作用的source，该source只能被request使用。
@@ -135,6 +122,19 @@ const Update = action(async (bookId, data) => {
   request(Book, bookId) // 强制刷新数据
 })
 ```
+
+### renew(source, ...params)
+
+你可以使用renew来更新一个数据源。
+
+```js
+renew(source, { id })
+```
+
+请求完成时，对应参数的结构将会被放入仓库中，并触发对应的setup。
+
+注意，`Action`不能用于renew。
+
 
 ### isSource(source)
 
@@ -149,6 +149,17 @@ const Update = action(async (bookId, data) => {
 release([Book, Photo])
 release({ Book, Photo }) // -> 方便从文件一次性导出(import * as Sources from './srouces')时一次性释放
 ```
+
+### request(source, ...params)
+
+你可以用request，把source转化为类似一个普通的ajax请求来使用。
+基于source发起请求，返回一个基于新请求的Promise，该请求将绕过algeb的运行机制，让你可以使用它作为纯粹的ajax数据请求。
+
+```js
+const data = await request(source, { id })
+```
+
+注意，`Compound Source`不能用于request。
 
 ## 高级用法
 
