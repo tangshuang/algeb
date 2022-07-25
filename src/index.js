@@ -212,6 +212,7 @@ function queryCompose(source, ...params) {
 
   const deps = item.deps
   const deferer = Promise.all(deps.filter(dep => dep.deferer).map(dep => dep.deferer)).then(() => item.value)
+  item.deferer = deferer
 
   return [item.value, broadcast, deferer]
 }
