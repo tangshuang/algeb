@@ -1,4 +1,4 @@
-import { getObjectHash, isEqual, isArray, uniqueArray } from 'ts-fns'
+import { getObjectHash, isEqual, isArray } from 'ts-fns'
 
 export const SOURCE_TYPES = {
   SOURCE: Symbol('source'),
@@ -182,6 +182,14 @@ function queryCompose(source, ...params) {
 
     const deps = item.deps
 
+    const defer = (reqs) => {
+      item.deferer = Promise.all(reqs)
+        .then(() => item.value)
+        .finally(() => {
+      })
+      return item.deferer
+    }
+
     // 如果传入了对应的source，那么只更新内部对应这几个source的内容
     if (sources.length) {
       const needs = []
@@ -193,11 +201,11 @@ function queryCompose(source, ...params) {
         })
       })
       const reqs = needs.map(atom => atom.next())
-      return Promise.all(reqs).then(() => item.value)
+      return defer(reqs)
     }
 
     const reqs = deps.map(atom => atom.next())
-    return Promise.all(reqs).then(() => item.value)
+    return defer(reqs)
   }
   item.broadcast = broadcast
 
@@ -281,6 +289,29 @@ export function release(sources) {
     source.atoms.forEach(traverseFree)
     source.atoms = []
   })
+}
+
+/**
+ * 获取数据，从仓库中直接获取
+ * @param {*} source
+ * @param  {...any} params
+ * @returns
+ */
+export function get(source, ...params) {
+  const [data] = query(source, ...params)
+  return data
+}
+
+/**
+ * 抓取，返回抓取的Promise，如果本地已经有了，那么就直接返回本地数据，如果本地没有，就抓取远端的
+ * 一般只有第一次抓取才会花比较长时间，后续都是直接返回
+ * @param {*} source
+ * @param {...any} params
+ * @returns
+ */
+export function fetch(source, ...params) {
+  const [, , deferer] = query(source, ...params)
+  return deferer
 }
 
 /**

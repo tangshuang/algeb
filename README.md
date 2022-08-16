@@ -125,6 +125,22 @@ const Update = action(async (bookId, data) => {
 })
 ```
 
+### get(source, ...params)
+
+直接获取仓库内当前数据
+
+```js
+const data = get(Some, 123)
+```
+
+### fetch(source, ...params)
+
+通过Promise获取当前数据，当前如果没有从后端拉取过数据，则会进行拉取后返回，如果已经拉取过，则直接返回。
+
+```js
+const data = await fetch(Some, 123)
+```
+
 ### renew(source, ...params)
 
 你可以使用renew来更新一个数据源。
