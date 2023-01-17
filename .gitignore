@@ -1,5 +1,8 @@
 node_modules/
 dist/
 .cache/
-/*.js
-/*.ts
+/angular.ts
+/angularjs.js
+/react.js
+/vue.js
+/index.js

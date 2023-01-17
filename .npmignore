@@ -4,3 +4,6 @@ dist/
 
 .build/
 .babelrc
+
+babel.config.js
+gulpfile.js

@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "parcel ./spec/index.html",
-    "build": "node .build/gulpfile.js"
+    "build": "gulp"
   },
   "repository": {
     "type": "git",
@@ -20,6 +20,7 @@
     "@babel/cli": "^7.12.1",
     "@babel/core": "^7.12.1",
     "@babel/preset-env": "^7.20.2",
+    "del": "^6.1.1",
     "gulp": "^4.0.2",
     "gulp-babel": "^8.0.0",
     "parcel-bundler": "^1.12.4"

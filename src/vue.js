@@ -1,4 +1,4 @@
-import { shallowRef, computed, onUnmounted, dataRef } from 'vue'
+import { shallowRef, computed, onUnmounted, ref } from 'vue'
 import { query, setup, affect } from './index.js'
 
 export function useSource(source, ...params) {
