@@ -1,19 +1,41 @@
-import { query, setup } from './index.js'
+import { query, setup, affect } from './index.js'
 
-export function useQuery(source, ...params) {
+export function useSource(source, ...params) {
   return function($scope) {
-    const data = { value: source.value }
-    let fn = null
+    const scope = {
+      value: source.value,
+      loading: false,
+    }
+
+    let renew = null
 
     const destroy = setup(function() {
-      const [some, fetchSome] = query(source, ...params)
-      data.value = some
-      fn = fetchSome
+      const [some, fetchSome, lifecycle] = query(source, ...params)
+      scope.value = some
+      renew = fetchSome
+      affect(() => {
+        const openLoading = () => {
+          scope.loading = true
+          $scope.$apply()
+        }
+        const closeLoading = () => {
+          scope.loading = false
+          $scope.$apply()
+        }
+
+        lifecycle.on('beforeFlush', openLoading)
+        lifecycle.on('afterAffect', closeLoading)
+
+        return () => {
+          lifecycle.off('beforeFlush', openLoading)
+          lifecycle.off('afterAffect', closeLoading)
+        }
+      }, [])
       $scope.$apply()
     })
 
     $scope.$on('$destroy', destroy)
 
-    return [data, fn]
+    return [scope, renew]
   }
 }

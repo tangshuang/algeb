@@ -1,5 +1,5 @@
 import { Injectable, ChangeDetectorRef } from '@angular/core'
-import { query, setup } from './index.js'
+import { query, setup, affect } from './index.js'
 
 interface Source {
   value: any,
@@ -9,24 +9,46 @@ interface Source {
   provideIn: 'root',
 })
 export class Algeb {
-  private destroies = []
+  private destroies: Function[] = []
 
   constructor(private detectorRef:ChangeDetectorRef) {}
 
-  useQuery(source:Source, ...params:any[]) {
-    const data = { value: source.value }
-    let fn:Function
+  useSource(source:Source, ...params:any[]) {
+    const scope = {
+      value: source.value,
+      loading: false,
+    }
+
+    let renew: Function
 
     const destroy = setup(function() {
-      const [some, fetchSome] = query(source, ...params)
-      data.value = some
-      fn = fetchSome
+      const [some, fetchSome, lifecycle] = query(source, ...params)
+      scope.value = some
+      renew = fetchSome
+      affect(() => {
+        const openLoading = () => {
+          scope.loading = true
+          this.detectorRef.detectChanges()
+        }
+        const closeLoading = () => {
+          scope.loading = false
+          this.detectorRef.detectChanges()
+        }
+
+        lifecycle.on('beforeFlush', openLoading)
+        lifecycle.on('afterAffect', closeLoading)
+
+        return () => {
+          lifecycle.off('beforeFlush', openLoading)
+          lifecycle.off('afterAffect', closeLoading)
+        }
+      }, [])
       this.detectorRef.detectChanges()
     })
 
     this.destroies.push(destroy)
 
-    return [data, fn]
+    return [scope, renew]
   }
 
   ngOnDestroy() {

@@ -14,12 +14,12 @@
   "author": "tangshuang",
   "license": "MIT",
   "dependencies": {
-    "ts-fns": "^8.1.9"
+    "ts-fns": "^11.0.4"
   },
   "devDependencies": {
     "@babel/cli": "^7.12.1",
     "@babel/core": "^7.12.1",
-    "@babel/preset-env": "^7.12.1",
+    "@babel/preset-env": "^7.20.2",
     "gulp": "^4.0.2",
     "gulp-babel": "^8.0.0",
     "parcel-bundler": "^1.12.4"

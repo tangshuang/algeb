@@ -284,25 +284,26 @@ const Mix = compose(function() {
 ## React中使用
 
 ```js
-import { useQuery } from 'algeb/react'
+import { useSource } from 'algeb/react'
 
 function MyComponent(props) {
   const { id } = props
-  const [some, fetchSome] = useQuery(SomeSource, id)
+  const [some, fetchSome, loading] = useSource(SomeSource, id)
   // ...
 }
 ```
 
 ## Vue中使用
 
+仅支持vue3.0以上。
+
 ```js
-import { useQuery } from 'algeb/vue'
+import { useSource } from 'algeb/vue'
 
 export default {
   setup(props) {
     const { id } = props
-    const [_some, fetchSome] = useQuery(SomeSource, id)
-    const some = _some.value
+    const [some, fetchSome, loading] = useSource(SomeSource, id)
     // ...
   }
 }
@@ -311,13 +312,14 @@ export default {
 ## Angularjs中使用
 
 ```js
-const { useQuery } = require('algeb/vue')
+const { useSource } = require('algeb/vue')
 
 module.exports = ['$scope', '$stateParams', function($scope, $stateParams) {
   const { id } = $stateParams
-  const [some, fetchSome] = useQuery(SomeSource, id)($scope)
-  $scope.some = some // { value }
-  // ...
+  const [some, fetchSome] = useSource(SomeSource, id)($scope)
+  $scope.some = some // { value, loading }
+  // $scope.some.value
+  // $scope.some.loading
 }]
 ```
 
@@ -330,9 +332,13 @@ import { Algeb } from 'algeb/angular'
 class MyComponent {
   @Input() id
 
+  private some:any
+
   constructor(private algeb:Algeb) {
-    const [some, fetchSome] = this.algeb.useQuery(SomeSource, this.id)
-    this.some = some // { value }
+    const [some, fetchSome] = this.algeb.useSource(SomeSource, this.id)
+    this.some = some // { value, loading }
+    // this.some.value
+    // $scope.some.loading
   }
 }
 ```

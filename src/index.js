@@ -12,6 +12,33 @@ const HOOKS_CHAIN = []
 
 let isInitingSource = false
 
+
+function Event() {
+  this.listeners = []
+}
+Event.prototype.on = function(type, fn) {
+  this.listeners.push({ type, fn })
+}
+Event.prototype.emit = function(type, ...args) {
+  this.listeners.forEach((item) => {
+    if (item.type !== type) {
+      return
+    }
+    item.fn(...args)
+  })
+}
+Event.prototype.off = function(type, fn) {
+  this.listeners.forEach((item, i) => {
+    if (item.type === type && item.fn === fn) {
+      this.listeners.splice(i, 1)
+    }
+  })
+}
+Event.prototype.has = function(type, fn) {
+  return this.listeners.some(item => item.type === type && item.fn === fn)
+}
+
+
 export function source(get, value) {
   const source = {
     type: SOURCE_TYPES.SOURCE,
@@ -58,7 +85,7 @@ export function action(act) {
 export function query(source, ...params) {
   const { type, value } = source
   if (isInitingSource) {
-    return [value, () => Promise.resolve(value), Promise.resolve(value)]
+    return [value, () => Promise.resolve(value), new Event()]
   }
   if (type === SOURCE_TYPES.SOURCE) {
     return querySource(source, ...params)
@@ -113,24 +140,35 @@ function querySource(source, ...params) {
   // 找到对应的原子
   if (atom) {
     host(atom)
-    return [atom.value, atom.next, atom.deferer]
+    return [atom.value, atom.next, atom.event]
   }
 
   // 默认原子
-  const item = { hash, value }
+  const item = {
+    hash,
+    value,
+    event: new Event(),
+  }
 
   const next = () => {
     if (item.defering) {
       return item.deferer
     }
 
+    const prev = item.value
+    item.event.emit('beforeFlush', prev)
+
     const res = get(...params)
     item.defering = 1
     item.deferer = Promise.resolve(res)
       .then((value) => {
         item.value = value
+        item.event.emit('afterFlush', value, prev)
+
         emit(item)
-        return res
+        item.event.emit('afterAffect', value, prev)
+
+        return value
       })
       .finally(() => {
         item.defering = 0
@@ -158,10 +196,16 @@ function queryCompose(source, ...params) {
 
   if (atom) {
     host(atom)
-    return [atom.value, atom.broadcast, atom.deferer]
+    return [atom.value, atom.broadcast, atom.event]
   }
 
-  const item = { hash, value, deps: [], hooks: [] }
+  const item = {
+    hash,
+    value,
+    deps: [],
+    hooks: [],
+    event: new Event(),
+  }
 
   const run = () => {
     HOSTS_CHAIN.push(item)
@@ -171,9 +215,18 @@ function queryCompose(source, ...params) {
   }
 
   const next = () => {
+    const prev = item.value
+    item.event.emit('beforeFlush', prev)
+
     run(item)
+
+    const next = item.value
+    item.event.emit('afterFlush', next, prev)
+
     emit(item)
-    return Promise.resolve(item.value)
+    item.event.emit('afterAffect', next, prev)
+
+    return Promise.resolve(next)
   }
   item.next = next
 
@@ -218,11 +271,7 @@ function queryCompose(source, ...params) {
   // 加入图中
   host(item)
 
-  const deps = item.deps
-  const deferer = Promise.all(deps.filter(dep => dep.deferer).map(dep => dep.deferer)).then(() => item.value)
-  item.deferer = deferer
-
-  return [item.value, broadcast, deferer]
+  return [item.value, broadcast, item.event]
 }
 
 // 解除全部effects，避免内存泄露
@@ -332,7 +381,11 @@ export function renew(source, ...params) {
  * @returns {boolean}
  */
 export function isSource(source) {
-  return Object.values(SOURCE_TYPES).includes(source && source.type)
+  const type = source && source.type
+  if (!type) {
+    return false
+  }
+  return [SOURCE_TYPES.ACTION, SOURCE_TYPES.COMPOSE, SOURCE_TYPES.SOURCE, SOURCE_TYPES.SETUP].includes(type)
 }
 
 /**

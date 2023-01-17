@@ -1,17 +1,66 @@
-import { useState, useEffect, useRef } from 'react'
-import { query, setup } from './index.js'
+import { useEffect, useRef, useState, useLayoutEffect } from 'react'
+import { query, setup, isSource, affect } from 'algeb'
+import { useShallowLatest } from './shallow-latest'
+import { isShallowEqual, isArray, isObject } from 'ts-fns'
 
-export function useQuery(source, ...params) {
-  const [data, update] = useState(source.value)
-  const fn = useRef(null)
+function useShallowLatest(obj) {
+  const used = useRef(false)
+  const latest = useRef(obj)
+
+  if (used.current && !isShallowEqual(latest.current, obj)) {
+    latest.current = isArray(obj) ? [...obj]
+      : isObject(obj) ? { ...obj }
+      : obj
+  }
+
+  if (!used.current) {
+    used.current = true
+  }
+
+  return latest.current
+}
+
+export function useSource(source, ...params) {
+  const ref = useRef([source?.value, () => Promise.resolve(source?.value)])
+  const args = useShallowLatest(params)
+  const [loading, setLoading] = useState(false)
+
+  const isUnmounted = useRef(false)
+  useLayoutEffect(() => () => {
+    isUnmounted.current = true
+  }, [])
 
   useEffect(() => {
-    return setup(function() {
-      const [some, fetchSome] = query(source, ...params)
-      update(some)
-      fn.current = fetchSome
-    })
-  }, [source, ...params])
+    if (!isSource(source)) {
+      return
+    }
 
-  return [data, () => fn.current()]
+    const stop = setup(() => {
+      const [data, renew, lifecycle] = query(source, ...args)
+      ref.current = [data, renew]
+      affect(() => {
+        const openLoading = () => {
+          if (!isUnmounted.current) {
+            setLoading(true)
+          }
+        }
+        const closeLoading = () => {
+          if (!isUnmounted.current) {
+            setLoading(false)
+          }
+        }
+
+        lifecycle.on('beforeFlush', openLoading)
+        lifecycle.on('afterAffect', closeLoading)
+
+        return () => {
+          lifecycle.off('beforeFlush', openLoading)
+          lifecycle.off('afterAffect', closeLoading)
+        }
+      }, [])
+    })
+    return stop
+  }, [source, args])
+
+  return [...ref.current, loading]
 }
