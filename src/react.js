@@ -7,7 +7,7 @@ function useShallowLatest(obj) {
   const used = useRef(false)
   const latest = useRef(obj)
 
-  if (used.current && !isShallowEqual(latest.current, obj)) {
+  if (used.current && !isShallowEqual(latest.current, obj, 1)) {
     latest.current = isArray(obj) ? [...obj]
       : isObject(obj) ? { ...obj }
       : obj

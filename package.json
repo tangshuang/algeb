@@ -14,7 +14,7 @@
   "author": "tangshuang",
   "license": "MIT",
   "dependencies": {
-    "ts-fns": "^11.0.4"
+    "ts-fns": "^11.1.0"
   },
   "devDependencies": {
     "@babel/cli": "^7.12.1",
