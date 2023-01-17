@@ -99,7 +99,7 @@ export function query(source, ...params) {
 }
 
 // 向上冒泡
-const emit = (atom) => {
+const propagateAffect = (atom) => {
   if (!atom.hosts) {
     return
   }
@@ -110,6 +110,20 @@ const emit = (atom) => {
     }
     else {
       host.next()
+    }
+  })
+}
+const propagatePrepareFlush = (atom) => {
+  if (!atom.hosts) {
+    return
+  }
+
+  atom.hosts.forEach((host, i) => {
+    if (host.end) {
+      atom.hosts.splice(i, 1)
+    }
+    else if (host.prepareFlush) {
+      host.prepareFlush()
     }
   })
 }
@@ -150,13 +164,20 @@ function querySource(source, ...params) {
     event: new Event(),
   }
 
+  const prepareFlush = () => {
+    const prev = item.value
+    item.event.emit('beforeAffect', prev)
+    propagatePrepareFlush(item)
+    item.event.emit('beforeFlush', prev)
+  }
+
   const next = () => {
     if (item.defering) {
       return item.deferer
     }
 
     const prev = item.value
-    item.event.emit('beforeFlush', prev)
+    prepareFlush()
 
     const res = get(...params)
     item.defering = 1
@@ -165,7 +186,7 @@ function querySource(source, ...params) {
         item.value = value
         item.event.emit('afterFlush', value, prev)
 
-        emit(item)
+        propagateAffect(item)
         item.event.emit('afterAffect', value, prev)
 
         return value
@@ -177,6 +198,7 @@ function querySource(source, ...params) {
     return item.deferer
   }
   item.next = next
+  item.prepareFlush = prepareFlush
 
   // 立即开始请求
   const deferer = next()
@@ -214,32 +236,39 @@ function queryCompose(source, ...params) {
     HOSTS_CHAIN.pop()
   }
 
+  const prepareFlush = () => {
+    const prev = item.value
+    item.event.emit('beforeAffect', prev)
+    propagatePrepareFlush(item)
+    item.event.emit('beforeFlush', prev)
+  }
   const next = () => {
     const prev = item.value
-    item.event.emit('beforeFlush', prev)
 
     run(item)
-
     const next = item.value
     item.event.emit('afterFlush', next, prev)
 
-    emit(item)
+    propagateAffect(item)
     item.event.emit('afterAffect', next, prev)
 
     return Promise.resolve(next)
   }
   item.next = next
+  item.prepareFlush = prepareFlush
 
   const broadcast = (...sources) => {
-    // host will recompute/popagate in dep.next, so we do not need to do `next` any more
+    // 内部会去遍历依赖，并触发依赖的重新计算，
+    // 而依赖完成重新计算之后，又会回头往上冒泡触发当前source的 `next` `prepareFlush`，因此，不需要关心这两个动作
+    // flush是先捕获再冒泡，beforeFlush类似捕获，afterFlush类似冒泡
+    // affect是先冒泡再捕获，beforeAffect类似冒泡，afterAffect类似捕获
+    // 对于同一个atom，顺序为：beforeAffect -> beforeFlush -> afterFlush -> afterAffect
 
     const deps = item.deps
 
     const defer = (reqs) => {
       item.deferer = Promise.all(reqs)
         .then(() => item.value)
-        .finally(() => {
-      })
       return item.deferer
     }
 

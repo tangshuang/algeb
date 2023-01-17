@@ -45,13 +45,38 @@ const Book = source(async function(bookId) {
 获取源数据。
 
 ```js
-const [book, refetch, deferer] = query(Book, bookId)
+const [book, refetch, lifecycle] = query(Book, bookId)
 ```
 
-我们得到一个只有3个值的数组，第一个值是当前Book的真实数据，第二个值是重新获取最新的数据的触发函数（该触发函数只触发请求，不返回结果），第三个值是请求过程的deferer，可用于判断是否还在处于请求状态中。
+我们得到一个只有3个值的数组，第一个值是当前Book的真实数据，第二个值是重新获取最新的数据的触发函数（该触发函数只触发请求，不返回结果），第三个值是一个辅助的lifecycle对象（用于在数据的请求前后执行某些动作）。
 
 - Source 由`source`或`compose`创建的源。
 - params 传给`source`或`compose`第一个参数函数的参数。
+
+来看下lifecycle的用法：
+
+```js
+setup(() => {
+  const const [book, refetch, lifecycle] = query(Book, bookId)
+  // 必须在affect中进行
+  affect(() => {
+    const print = () => console.log('beforeFlush')
+    // 监听beforeFlush，并执行print函数
+    lifecycle.on('beforeFlush', print)
+    // affect卸载函数
+    return () => {
+      lifecycle.off('beforeFlush', print)
+    }
+  }, [])
+})
+```
+
+目前仅支持四个生命周期钩子：
+
+- beforeAffect 在一切行动开始之前
+- beforeFlush 在源数据被修改之前
+- afterFlush 在源数据被修改之后
+- afterAffect 在完成数据拉取并产生实际的影响之后
 
 下文会在`setup`部分详细讲`refetch`的运行机制。
 
