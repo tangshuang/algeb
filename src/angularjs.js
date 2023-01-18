@@ -16,22 +16,22 @@ export function useSource(source, ...params) {
       affect(() => {
         const openLoading = () => {
           scope.loading = true
-          $scope.$apply()
+          $scope.$applyAsync()
         }
         const closeLoading = () => {
           scope.loading = false
-          $scope.$apply()
+          $scope.$applyAsync()
         }
 
         lifecycle.on('beforeFlush', openLoading)
-        lifecycle.on('afterFlush', closeLoading)
+        lifecycle.on('afterAffect', closeLoading)
 
         return () => {
           lifecycle.off('beforeFlush', openLoading)
-          lifecycle.off('afterFlush', closeLoading)
+          lifecycle.off('afterAffect', closeLoading)
         }
       }, [])
-      $scope.$apply()
+      $scope.$applyAsync()
     })
 
     $scope.$on('$destroy', destroy)

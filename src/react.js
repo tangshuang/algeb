@@ -19,10 +19,16 @@ function useShallowLatest(obj) {
   return latest.current
 }
 
+function useForceUpdate() {
+  const [, forceUpdate] = useState({});
+  return () => forceUpdate({});
+}
+
 export function useSource(source, ...params) {
   const ref = useRef([source?.value, () => Promise.resolve(source?.value)])
   const args = useShallowLatest(params)
   const [loading, setLoading] = useState(false)
+  const forceUpdate = useForceUpdate()
 
   const isUnmounted = useRef(false)
   useLayoutEffect(() => () => {
@@ -41,20 +47,22 @@ export function useSource(source, ...params) {
         const openLoading = () => {
           if (!isUnmounted.current) {
             setLoading(true)
+            forceUpdate()
           }
         }
         const closeLoading = () => {
           if (!isUnmounted.current) {
             setLoading(false)
+            forceUpdate()
           }
         }
 
         lifecycle.on('beforeFlush', openLoading)
-        lifecycle.on('afterFlush', closeLoading)
+        lifecycle.on('afterAffect', closeLoading)
 
         return () => {
           lifecycle.off('beforeFlush', openLoading)
-          lifecycle.off('afterFlush', closeLoading)
+          lifecycle.off('afterAffect', closeLoading)
         }
       }, [])
     })

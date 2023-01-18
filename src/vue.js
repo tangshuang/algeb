@@ -22,11 +22,11 @@ export function useSource(source, ...params) {
       }
 
       lifecycle.on('beforeFlush', openLoading)
-      lifecycle.on('afterFlush', closeLoading)
+      lifecycle.on('afterAffect', closeLoading)
 
       return () => {
         lifecycle.off('beforeFlush', openLoading)
-        lifecycle.off('afterFlush', closeLoading)
+        lifecycle.off('afterAffect', closeLoading)
       }
     }, [])
   })

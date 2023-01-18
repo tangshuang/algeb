@@ -76,7 +76,7 @@ setup(() => {
 - beforeAffect 在一切行动开始之前
 - beforeFlush 在源数据被修改之前
 - afterFlush 在源数据被修改之后
-- afterAffect 在完成数据拉取并产生实际的影响之后
+- afterAffect 在完成数据拉取并产生实际的影响（比如触发setup的重新执行）之后
 
 下文会在`setup`部分详细讲`refetch`的运行机制。
 
