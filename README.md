@@ -45,10 +45,10 @@ const Book = source(async function(bookId) {
 获取源数据。
 
 ```js
-const [book, refetch, lifecycle] = query(Book, bookId)
+const [book, refetch, deferer, lifecycle] = query(Book, bookId)
 ```
 
-我们得到一个只有3个值的数组，第一个值是当前Book的真实数据，第二个值是重新获取最新的数据的触发函数（该触发函数只触发请求，不返回结果），第三个值是一个辅助的lifecycle对象（用于在数据的请求前后执行某些动作）。
+我们得到一个只有4个值的数组，第一个值是当前Book的真实数据，第二个值是重新获取最新的数据的触发函数（该触发函数只触发请求，不返回结果），第三个值是对应数据的获取Promise，第四个值是一个辅助的lifecycle对象（用于在数据的请求前后执行某些动作）。
 
 - Source 由`source`或`compose`创建的源。
 - params 传给`source`或`compose`第一个参数函数的参数。
@@ -57,7 +57,7 @@ const [book, refetch, lifecycle] = query(Book, bookId)
 
 ```js
 setup(() => {
-  const const [book, refetch, lifecycle] = query(Book, bookId)
+  const const [book, refetch, deferer, lifecycle] = query(Book, bookId)
   // 必须在affect中进行
   affect(() => {
     const print = () => console.log('beforeFlush')
@@ -278,6 +278,10 @@ updateMix(Book) // 只重新请求Book源
 ```js
 const Mix = compose(function(bookId) {
   const queryBook = apply((bookId) => ..., { name, price })
+  // 类似于做了两个步骤
+  // const Book = source((bookId) => ...);
+  // const queryBook = (...params) => query(Book, ...params);
+  // 不过这里的Book只在当前域内可用
   const [book, updateBook] = queryBook(bookId)
   ...
 })

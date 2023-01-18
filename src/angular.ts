@@ -22,7 +22,7 @@ export class Algeb {
     let renew: Function
 
     const destroy = setup(function() {
-      const [some, fetchSome, lifecycle] = query(source, ...params)
+      const [some, fetchSome, , lifecycle] = query(source, ...params)
       scope.value = some
       renew = fetchSome
       affect(() => {

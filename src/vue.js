@@ -10,7 +10,7 @@ export function useSource(source, ...params) {
   let renew = null
 
   const stop = setup(function() {
-    const [some, fetchSome, lifecycle] = query(source, ...params)
+    const [some, fetchSome, , lifecycle] = query(source, ...params)
     dataRef.value = some
     renew = fetchSome
     affect(() => {

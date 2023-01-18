@@ -85,7 +85,7 @@ export function action(act) {
 export function query(source, ...params) {
   const { type, value } = source
   if (isInitingSource) {
-    return [value, () => Promise.resolve(value), new Event()]
+    return [value, () => Promise.resolve(value), Promise.resolve(value), new Event()]
   }
   if (type === SOURCE_TYPES.SOURCE) {
     return querySource(source, ...params)
@@ -154,7 +154,7 @@ function querySource(source, ...params) {
   // 找到对应的原子
   if (atom) {
     host(atom)
-    return [atom.value, atom.next, atom.event]
+    return [atom.value, atom.next, atom.deferer, atom.event]
   }
 
   // 默认原子
@@ -201,14 +201,15 @@ function querySource(source, ...params) {
   item.prepareFlush = prepareFlush
 
   // 立即开始请求
-  const deferer = next()
+  next()
+
   // 生成好了next, deferer, defering
   atoms.push(item)
 
   // 加入图中
   host(item)
 
-  return [value, next, deferer]
+  return [item.value, next, item.deferer, item.event]
 }
 
 function queryCompose(source, ...params) {
@@ -218,7 +219,7 @@ function queryCompose(source, ...params) {
 
   if (atom) {
     host(atom)
-    return [atom.value, atom.broadcast, atom.event]
+    return [atom.value, atom.broadcast, atom.deferer, atom.event]
   }
 
   const item = {
@@ -300,7 +301,11 @@ function queryCompose(source, ...params) {
   // 加入图中
   host(item)
 
-  return [item.value, broadcast, item.event]
+  // 等依赖全部ready之后deferer才resolve
+  const deps = item.deps
+  item.deferer = Promise.all(deps.filter(dep => dep.deferer).map(dep => dep.deferer)).then(() => item.value)
+
+  return [item.value, broadcast, item.deferer, item.event]
 }
 
 // 解除全部effects，避免内存泄露
@@ -505,7 +510,7 @@ export function select(compute, deps) {
 
 export function apply(get, value) {
   if (isInitingSource) {
-    return () => [value, () => Promise.resolve(value)]
+    return () => [value, () => Promise.resolve(value), Promise.resolve(value), new Event()]
   }
 
   const host = HOSTS_CHAIN[HOSTS_CHAIN.length - 1]

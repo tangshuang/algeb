@@ -35,7 +35,7 @@ export function useSource(source, ...params) {
     }
 
     const stop = setup(() => {
-      const [data, renew, lifecycle] = query(source, ...args)
+      const [data, renew, , lifecycle] = query(source, ...args)
       ref.current = [data, renew]
       affect(() => {
         const openLoading = () => {
