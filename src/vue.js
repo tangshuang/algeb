@@ -1,8 +1,9 @@
 import { shallowRef, computed, onUnmounted, ref } from 'vue'
-import { query, setup, affect } from './index.js'
+import { query, setup, affect, get } from './index.js'
 
 export function useSource(source, ...params) {
-  const dataRef = shallowRef(source.value)
+  const currentValue = get(source, ...params)
+  const dataRef = shallowRef(currentValue)
   const data = computed(() => dataRef.value)
   const loadingRef = ref(false)
   const loading = computed(() => loadingRef.value)

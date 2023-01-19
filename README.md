@@ -135,75 +135,6 @@ setInterval(() => {
 }, 1000)
 ```
 
-## 非代数效应用法
-
-以下方法都不应该在setup内部被调用。
-
-### action(act)
-
-创建一个仅用于处理副作用的source，该source只能被request使用。
-
-```js
-const Update = action(async (bookId, data) => {
-  await patch('/api/books/' + bookId, data) // 提交数据到后台
-  request(Book, bookId) // 强制刷新数据
-})
-```
-
-### get(source, ...params)
-
-直接获取仓库内当前数据
-
-```js
-const data = get(Some, 123)
-```
-
-### fetch(source, ...params)
-
-通过Promise获取当前数据，当前如果没有从后端拉取过数据，则会进行拉取后返回，如果已经拉取过，则直接返回。
-
-```js
-const data = await fetch(Some, 123)
-```
-
-### renew(source, ...params)
-
-你可以使用renew来更新一个数据源。
-
-```js
-renew(source, { id })
-```
-
-请求完成时，对应参数的结构将会被放入仓库中，并触发对应的setup。
-
-注意，`Action`不能用于renew。
-
-
-### isSource(value)
-
-用于判断一个对象是否为source，返回boolean。
-
-### release(sources)
-
-释放之前被请求过的源的保持数据，恢复到该源的初始状态。
-注意：基于不同参数得到的不同数据，将被全部释放，新的query都会重新请求数据。
-
-```js
-release([Book, Photo])
-release({ Book, Photo }) // -> 方便从文件一次性导出(import * as Sources from './srouces')时一次性释放
-```
-
-### request(source, ...params)
-
-你可以用request，把source转化为类似一个普通的ajax请求来使用。
-基于source发起请求，返回一个基于新请求的Promise，该请求将绕过algeb的运行机制，让你可以使用它作为纯粹的ajax数据请求。
-
-```js
-const data = await request(source, { id })
-```
-
-注意，`Compound Source`不能用于request。
-
 ## 高级用法
 
 ```js
@@ -309,6 +240,93 @@ const Mix = compose(function() {
 ```
 
 它和react的useRef很像，修改.value不会带来重新请求。
+
+## 非代数效应用法
+
+以下方法都不必在setup内部被调用，或与setup建立起来的体系无关。你可以理解为这些方法是algeb提供的扩展函数。
+
+在algeb内部，会把一个数据源的具体数据进行缓存，当第二次传入相同参数时，不需要再次去远端请求，直接使用该缓存即可。
+Algeb中的大部分方法都是基于这一设计来完成的。
+但这里有一个问题，如果用户进行了更新操作，那么该数据理论上应该是最新的数据，但是由于我们读取了缓存，因此，就会导致读取出来的是不对的数据，因此，我们需要建立一套机制，在用户提交数据成功之后，立即更新与之关联的缓存。大致做法如下：
+
+```js
+const SourceA = source(async (id) => ..., {})
+
+const ActionA = action(async (id) => {
+  // postData...
+  await renew(SourceA, id) // 这里将更新SourceA中的数据（缓存），这样下次从SourceA中读取数据时，将获得最新的数据
+})
+
+await request(ActionA, id)
+```
+
+上面这一套机制，就可以保证我们的数据是实时最新的。
+除了单用户本地更新外，我们还可以基于websocket来调用`renew(SourceA, id)`，这样，即使有用户在另外一台电脑上进行了更新，我们也能知道这个更新动作，并更新SourceA中的数据。
+
+### action(act)
+
+创建一个仅用于处理副作用的source，该source只能被request使用。
+
+```js
+const Update = action(async (bookId, data) => {
+  await patch('/api/books/' + bookId, data) // 提交数据到后台
+  request(Book, bookId) // 强制刷新数据
+})
+```
+
+### get(source, ...params)
+
+直接获取仓库内当前数据，且不会触发数据从远端拉取。你可以理解为get仅用于读取已经存在的数据（缓存）。
+
+```js
+const data = get(Some, 123)
+```
+
+### fetch(source, ...params)
+
+通过Promise获取当前数据，当前如果没有从后端拉取过数据，则会进行拉取后返回，如果已经拉取过，则直接返回。与get不同，它会先读取缓存，在没有缓存的情况下，直接从后端拉取数据，且不会更新本地缓存。
+
+```js
+const data = await fetch(Some, 123)
+```
+
+### request(source, ...params)
+
+读取数据：你可以用request，把source转化为类似一个普通的ajax请求来使用（类似于fetch，但不会使用缓存）。
+
+发送数据：基于source发起请求，返回一个基于新请求的Promise，该请求将绕过algeb的运行机制，让你可以使用它作为纯粹的ajax数据请求。作用于ACTION类型的source。
+
+```js
+const data = await request(source, { id })
+```
+
+注意，`Compound Source`不能用于request。
+
+### renew(source, ...params)
+
+你可以使用renew来更新一个数据且缓存它。
+
+```js
+renew(source, { id })
+```
+
+请求完成时，对应参数的结构将会被放入仓库中，并触发对应的setup。
+
+注意，`Action`不能用于renew。
+
+### isSource(value)
+
+用于判断一个对象是否为source，返回boolean。
+
+### release(sources)
+
+释放之前被请求过的源的保持数据，恢复到该源的初始状态。
+注意：基于不同参数得到的不同数据，将被全部释放，新的query都会重新请求数据。
+
+```js
+release([Book, Photo])
+release({ Book, Photo }) // -> 方便从文件一次性导出(import * as Sources from './srouces')时一次性释放
+```
 
 ## React中使用
 

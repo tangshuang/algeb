@@ -1,5 +1,5 @@
 import { Injectable, ChangeDetectorRef } from '@angular/core'
-import { query, setup, affect } from './index.js'
+import { query, setup, affect, get } from './index.js'
 
 interface Source {
   value: any,
@@ -14,8 +14,10 @@ export class Algeb {
   constructor(private detectorRef:ChangeDetectorRef) {}
 
   useSource(source:Source, ...params:any[]) {
+    const currentValue = get(source, ...params)
+
     const scope = {
-      value: source.value,
+      value: currentValue,
       loading: false,
     }
 

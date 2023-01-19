@@ -375,17 +375,6 @@ export function release(sources) {
 }
 
 /**
- * 获取数据，从仓库中直接获取
- * @param {*} source
- * @param  {...any} params
- * @returns
- */
-export function get(source, ...params) {
-  const [data] = query(source, ...params)
-  return data
-}
-
-/**
  * 抓取，返回抓取的Promise，如果本地已经有了，那么就直接返回本地数据，如果本地没有，就抓取远端的
  * 一般只有第一次抓取才会花比较长时间，后续都是直接返回
  * @param {*} source
@@ -409,17 +398,38 @@ export function renew(source, ...params) {
   return renew()
 }
 
+// 普通函数 --------------------------------
+
 /**
  * 判断一个值是否为source
  * @param {*} source
  * @returns {boolean}
  */
-export function isSource(source) {
+ export function isSource(source) {
   const type = source && source.type
   if (!type) {
     return false
   }
   return [SOURCE_TYPES.ACTION, SOURCE_TYPES.COMPOSE, SOURCE_TYPES.SOURCE, SOURCE_TYPES.SETUP].includes(type)
+}
+
+/**
+ * 获取数据，从仓库中直接获取
+ * @param {*} source
+ * @param  {...any} params
+ * @returns
+ */
+ export function get(source, ...params) {
+  const { atoms, value } = source
+  const hash = getObjectHash(params)
+  const atom = atoms.find(item => item.hash === hash)
+
+  // 找到对应的原子
+  if (atom) {
+    return atom.value
+  }
+
+  return value
 }
 
 /**

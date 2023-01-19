@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useLayoutEffect } from 'react'
-import { query, setup, isSource, affect } from 'algeb'
+import { query, setup, isSource, affect, get } from './index.js'
 import { isShallowEqual, isArray, isObject } from 'ts-fns'
 
 function useShallowLatest(obj) {
@@ -25,7 +25,9 @@ function useForceUpdate() {
 }
 
 export function useSource(source, ...params) {
-  const ref = useRef([source?.value, () => Promise.resolve(source?.value)])
+  const currentValue = get(source, ...params)
+  const ref = useRef([currentValue, () => Promise.resolve(currentValue)])
+
   const args = useShallowLatest(params)
   const [loading, setLoading] = useState(false)
   const forceUpdate = useForceUpdate()

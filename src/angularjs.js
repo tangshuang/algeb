@@ -2,8 +2,10 @@ import { query, setup, affect } from './index.js'
 
 export function useSource(source, ...params) {
   return function($scope) {
+    const currentValue = get(source, ...params)
+
     const scope = {
-      value: source.value,
+      value: currentValue,
       loading: false,
     }
 
