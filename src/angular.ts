@@ -1,5 +1,5 @@
 import { Injectable, ChangeDetectorRef } from '@angular/core'
-import { query, setup, affect, get } from 'algeb'
+import { query, setup, affect, get, isSource } from 'algeb'
 
 interface Source {
   value: any,
@@ -14,41 +14,42 @@ export class Algeb {
   constructor(private detectorRef:ChangeDetectorRef) {}
 
   useSource(source:Source, ...params:any[]) {
-    const currentValue = get(source, ...params)
+    const currentValue = isSource(source) ? get(source, ...params) : source
 
     const scope = {
       value: currentValue,
       loading: false,
     }
 
-    let renew: Function
+    let renew = () => Promise.resolve(currentValue)
 
-    const destroy = setup(function() {
-      const [some, fetchSome, , lifecycle] = query(source, ...params)
-      scope.value = some
-      renew = fetchSome
-      affect(() => {
-        const openLoading = () => {
-          scope.loading = true
-          this.detectorRef.detectChanges()
-        }
-        const closeLoading = () => {
-          scope.loading = false
-          this.detectorRef.detectChanges()
-        }
+    if (isSource(source)) {
+      const stop = setup(function() {
+        const [some, fetchSome, , lifecycle] = query(source, ...params)
+        scope.value = some
+        renew = fetchSome
+        affect(() => {
+          const openLoading = () => {
+            scope.loading = true
+            this.detectorRef.detectChanges()
+          }
+          const closeLoading = () => {
+            scope.loading = false
+            this.detectorRef.detectChanges()
+          }
 
-        lifecycle.on('beforeFlush', openLoading)
-        lifecycle.on('afterAffect', closeLoading)
+          lifecycle.on('beforeFlush', openLoading)
+          lifecycle.on('afterAffect', closeLoading)
 
-        return () => {
-          lifecycle.off('beforeFlush', openLoading)
-          lifecycle.off('afterAffect', closeLoading)
-        }
-      }, [])
-      this.detectorRef.detectChanges()
-    })
-
-    this.destroies.push(destroy)
+          return () => {
+            lifecycle.off('beforeFlush', openLoading)
+            lifecycle.off('afterAffect', closeLoading)
+          }
+        }, [])
+        this.detectorRef.detectChanges()
+      })
+      this.destroies.push(stop)
+    }
 
     return [scope, renew]
   }

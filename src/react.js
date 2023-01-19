@@ -25,7 +25,7 @@ function useForceUpdate() {
 }
 
 export function useSource(source, ...params) {
-  const currentValue = get(source, ...params)
+  const currentValue = isSource(source) ? get(source, ...params) : source
   const ref = useRef([currentValue, () => Promise.resolve(currentValue)])
 
   const args = useShallowLatest(params)
