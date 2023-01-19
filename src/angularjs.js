@@ -1,4 +1,4 @@
-import { query, setup, affect } from './index.js'
+import { query, setup, affect } from 'algeb'
 
 export function useSource(source, ...params) {
   return function($scope) {

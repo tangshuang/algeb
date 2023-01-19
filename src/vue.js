@@ -1,5 +1,5 @@
 import { shallowRef, computed, onUnmounted, ref } from 'vue'
-import { query, setup, affect, get } from './index.js'
+import { query, setup, affect, get } from 'algeb'
 
 export function useSource(source, ...params) {
   const currentValue = get(source, ...params)

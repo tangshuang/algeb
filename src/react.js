@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useLayoutEffect } from 'react'
-import { query, setup, isSource, affect, get } from './index.js'
+import { query, setup, isSource, affect, get } from 'algeb'
 import { isShallowEqual, isArray, isObject } from 'ts-fns'
 
 function useShallowLatest(obj) {

@@ -1,5 +1,5 @@
 import { Injectable, ChangeDetectorRef } from '@angular/core'
-import { query, setup, affect, get } from './index.js'
+import { query, setup, affect, get } from 'algeb'
 
 interface Source {
   value: any,
