@@ -276,7 +276,7 @@ const Update = action(async (bookId, data) => {
 
 ### get(source, ...params)
 
-直接获取仓库内当前数据，且不会触发数据从远端拉取。你可以理解为get仅用于读取已经存在的数据（缓存）。
+直接获取当前数据（缓存）。
 
 ```js
 const data = get(Some, 123)
@@ -284,7 +284,7 @@ const data = get(Some, 123)
 
 ### fetch(source, ...params)
 
-通过Promise获取当前数据，当前如果没有从后端拉取过数据，则会进行拉取后返回，如果已经拉取过，则直接返回。与get不同，它会先读取缓存，在没有缓存的情况下，直接从后端拉取数据，且不会更新本地缓存。
+通过Promise获取当前数据（缓存），当前如果没有则从后端拉取过数据。
 
 ```js
 const data = await fetch(Some, 123)

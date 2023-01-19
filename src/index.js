@@ -405,7 +405,7 @@ export function renew(source, ...params) {
  * @param {*} source
  * @returns {boolean}
  */
- export function isSource(source) {
+export function isSource(source) {
   const type = source && source.type
   if (!type) {
     return false
@@ -419,17 +419,9 @@ export function renew(source, ...params) {
  * @param  {...any} params
  * @returns
  */
- export function get(source, ...params) {
-  const { atoms, value } = source
-  const hash = getObjectHash(params)
-  const atom = atoms.find(item => item.hash === hash)
-
-  // 找到对应的原子
-  if (atom) {
-    return atom.value
-  }
-
-  return value
+export function get(source, ...params) {
+  const [data] = query(source, ...params)
+  return data
 }
 
 /**
@@ -438,7 +430,7 @@ export function renew(source, ...params) {
  * @param  {...any} params
  * @returns {Promise}
  */
- export function request(source, ...params) {
+export function request(source, ...params) {
   const { type } = source
 
   if (type === SOURCE_TYPES.ACTION) {
