@@ -372,19 +372,31 @@ export function setup(run) {
 }
 
 /**
- * 清空些数据源的已有数据
+ * 清空些数据源的已有数据，解除绑定，避免内存泄露
  * @param {array|object} sources
  */
-export function release(sources) {
-  if (!isArray(sources)) {
-    sources = Object.values(sources)
+export function release(source, ...params) {
+  if (isArray(source)) {
+    source.forEach((source) => {
+      source.atoms.forEach(traverseFree)
+      source.atoms = []
+    })
   }
-
-  sources.forEach((source) => {
-    source.atoms.forEach(traverseFree)
-    source.atoms = []
-  })
+  else if (!params.length) {
+    release([source])
+  }
+  // 如果传入了参数，则根据参数清楚特定的信息
+  else {
+    const { atoms, value } = source
+    const hash = getObjectHash(params)
+    const atom = atoms.find(item => item.hash === hash)
+    if (atom) {
+      atom.value = value
+      traverseFree(atom)
+    }
+  }
 }
+
 
 /**
  * 抓取，返回抓取的Promise，如果本地已经有了，那么就直接返回本地数据，如果本地没有，就抓取远端的

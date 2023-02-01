@@ -323,15 +323,17 @@ renew(source, { id })
 
 用于判断一个对象是否为source，返回boolean。
 
-### release(sources)
+### release(source, ...params)
 
 释放之前被请求过的源的保持数据，恢复到该源的初始状态。
-注意：基于不同参数得到的不同数据，将被全部释放，新的query都会重新请求数据。
+
+也可以传入一个数组，此时表示将情况该数组内全部source的全部信息。
 
 ```js
 release([Book, Photo])
-release({ Book, Photo }) // -> 方便从文件一次性导出(import * as Sources from './srouces')时一次性释放
 ```
+
+注意：基于不同参数得到的不同数据，将被全部释放，新的query都会重新请求数据。
 
 ## React中使用
 
