@@ -189,10 +189,14 @@ function querySource(source, ...params) {
         propagateAffect(item)
         item.event.emit('afterAffect', value, prev)
 
+        item.event.emit('done', value)
         return value
+      }, (e) => {
+        item.event.emit('fail', e)
       })
       .finally(() => {
         item.defering = 0
+        item.event.emit('finish')
       })
 
     return item.deferer
@@ -269,7 +273,15 @@ function queryCompose(source, ...params) {
 
     const defer = (reqs) => {
       item.deferer = Promise.all(reqs)
-        .then(() => item.value)
+        .then(() => {
+          item.event.emit('done', item.value)
+          return item.value
+        }, (e) => {
+          item.event.emit('fail', e)
+        })
+        .finally(() => {
+          item.event.emit('finish')
+        })
       return item.deferer
     }
 

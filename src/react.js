@@ -31,6 +31,7 @@ export function useSource(source, ...params) {
   const args = useShallowLatest(params)
   const [loading, setLoading] = useState(false)
   const forceUpdate = useForceUpdate()
+  const [error, setError] = useState(null)
 
   const isUnmounted = useRef(false)
   useLayoutEffect(() => () => {
@@ -46,30 +47,40 @@ export function useSource(source, ...params) {
       const [data, renew, , lifecycle] = query(source, ...args)
       ref.current = [data, renew]
       affect(() => {
-        const openLoading = () => {
+        const prepare = () => {
           if (!isUnmounted.current) {
+            setError(null)
             setLoading(true)
             forceUpdate()
           }
         }
-        const closeLoading = () => {
+        const done = () => {
           if (!isUnmounted.current) {
             setLoading(false)
             forceUpdate()
           }
         }
+        const fail = (error) => {
+          if (!isUnmounted.current) {
+            setError(error)
+            setLoading(false)
+            forceUpdate()
+          }
+        }
 
-        lifecycle.on('beforeFlush', openLoading)
-        lifecycle.on('afterAffect', closeLoading)
+        lifecycle.on('beforeAffect', prepare)
+        lifecycle.on('afterAffect', done)
+        lifecycle.on('fail', fail)
 
         return () => {
-          lifecycle.off('beforeFlush', openLoading)
-          lifecycle.off('afterAffect', closeLoading)
+          lifecycle.off('beforeAffect', prepare)
+          lifecycle.off('afterAffect', done)
+          lifecycle.off('fail', fail)
         }
       }, [])
     })
     return stop
   }, [source, args])
 
-  return [...ref.current, loading]
+  return [...ref.current, loading, error]
 }

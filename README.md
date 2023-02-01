@@ -71,12 +71,17 @@ setup(() => {
 })
 ```
 
-目前仅支持四个生命周期钩子：
+目前支持的生命周期钩子：
 
 - beforeAffect 在一切行动开始之前
 - beforeFlush 在源数据被修改之前
 - afterFlush 在源数据被修改之后
 - afterAffect 在完成数据拉取并产生实际的影响（比如触发setup的重新执行）之后
+- done 执行source get函数（请求数据）成功时
+- fail 执行source get函数（请求数据）失败时，可用于捕获ajax请求的错误信息或在get函数中主动/被动reject的错误信息
+- finish 单次执行数据获取结束，即使fail被触发，也会进入finish生命周期
+
+需要注意，Compound Source 和普通 Source 不同，因为 Compound Source 是依赖其他普通 Source 的，如果普通 Source 执行结束，就会对 Compound Source 产生影响，因此，Compound Source 的 afterFlush, afterAffect 会在每次普通 Source 执行结束时被触发，因此，它们的执行顺序是不确定的。基于相同的道理，Source 的 done, finish 无法替代 Compound Source 的 done, finish（fail 会被通知）。因此，对于 Compound Source 而言，只有主动调用其 renew 函数，才会触发 done, finish，否则只会被 Source 的更新所影响，这一点对于编程而言，其实不是很友好，需要你在开发过程中比较小心的使用。这种情况下，推荐只使用 beforeAffect, afterAffect, fail 这三个周期钩子来处理某些交互（beforeAffect 表示开始, afterAffect 表示成功，fail表示失败，需要在 afterAffect, fail 中都进行重置操作）。
 
 下文会在`setup`部分详细讲`refetch`的运行机制。
 
@@ -335,10 +340,15 @@ import { useSource } from 'algeb/react'
 
 function MyComponent(props) {
   const { id } = props
-  const [some, fetchSome, loading] = useSource(SomeSource, id)
+  const [data, renew, loading, error] = useSource(SomeSource, id)
   // ...
 }
 ```
+
+- data: 得到的数据
+- renew: 重新拉取的函数
+- loading: boolean 是否处于请求过程中
+- error??: Error 出错时抛出的错误
 
 ## Vue中使用
 
@@ -350,7 +360,7 @@ import { useSource } from 'algeb/vue'
 export default {
   setup(props) {
     const { id } = props
-    const [some, fetchSome, loading] = useSource(SomeSource, id)
+    const [data, renew, loading, error] = useSource(SomeSource, id)
     // ...
   }
 }
@@ -363,10 +373,10 @@ const { useSource } = require('algeb/vue')
 
 module.exports = ['$scope', '$stateParams', function($scope, $stateParams) {
   const { id } = $stateParams
-  const [some, fetchSome] = useSource(SomeSource, id)($scope)
-  $scope.some = some // { value, loading }
-  // $scope.some.value
-  // $scope.some.loading
+  const [data, renew] = useSource(SomeSource, id)($scope)
+  // data.value
+  // data.loading
+  // data.error
 }]
 ```
 
@@ -382,10 +392,12 @@ class MyComponent {
   private some:any
 
   constructor(private algeb:Algeb) {
-    const [some, fetchSome] = this.algeb.useSource(SomeSource, this.id)
-    this.some = some // { value, loading }
-    // this.some.value
-    // $scope.some.loading
+    const [data, renew] = this.algeb.useSource(SomeSource, this.id)
+    // data.value
+    // data.loading
+    // data.error
+    this.data = data
+    this.renew = renew
   }
 }
 ```

@@ -7,6 +7,8 @@ export function useSource(source, ...params) {
   const data = computed(() => dataRef.value)
   const loadingRef = ref(false)
   const loading = computed(() => loadingRef.value)
+  const errorRef = ref(null)
+  const error = computed(() => errorRef.value)
 
   let renew = () => Promise.resolve(data)
 
@@ -16,19 +18,26 @@ export function useSource(source, ...params) {
       dataRef.value = some
       renew = fetchSome
       affect(() => {
-        const openLoading = () => {
+        const prepare = () => {
+          errorRef.value = null
           loadingRef.value = true
         }
-        const closeLoading = () => {
+        const done = () => {
           loadingRef.value = false
         }
+        const fail = (error) => {
+          loadingRef.value = false
+          errorRef.value = error
+        }
 
-        lifecycle.on('beforeFlush', openLoading)
-        lifecycle.on('afterAffect', closeLoading)
+        lifecycle.on('beforeAffect', prepare)
+        lifecycle.on('afterAffect', done)
+        lifecycle.on('fail', fail)
 
         return () => {
-          lifecycle.off('beforeFlush', openLoading)
-          lifecycle.off('afterAffect', closeLoading)
+          lifecycle.off('beforeAffect', prepare)
+          lifecycle.off('afterAffect', done)
+          lifecycle.off('fail', fail)
         }
       }, [])
     })
@@ -36,5 +45,5 @@ export function useSource(source, ...params) {
     onUnmounted(stop)
   }
 
-  return [data, renew, loading]
+  return [data, renew, loading, error]
 }

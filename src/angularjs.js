@@ -17,21 +17,29 @@ export function useSource(source, ...params) {
         scope.value = some
         renew = fetchSome
         affect(() => {
-          const openLoading = () => {
+          const prepare = () => {
+            scope.error = null
             scope.loading = true
             $scope.$applyAsync()
           }
-          const closeLoading = () => {
+          const done = () => {
+            scope.loading = false
+            $scope.$applyAsync()
+          }
+          const fail = (error) => {
+            scope.error = error
             scope.loading = false
             $scope.$applyAsync()
           }
 
-          lifecycle.on('beforeFlush', openLoading)
-          lifecycle.on('afterAffect', closeLoading)
+          lifecycle.on('beforeAffect', prepare)
+          lifecycle.on('afterAffect', done)
+          lifecycle.on('fail', fail)
 
           return () => {
-            lifecycle.off('beforeFlush', openLoading)
-            lifecycle.off('afterAffect', closeLoading)
+            lifecycle.off('beforeAffect', prepare)
+            lifecycle.off('afterAffect', done)
+            lifecycle.off('fail', fail)
           }
         }, [])
         $scope.$applyAsync()

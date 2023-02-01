@@ -19,6 +19,7 @@ export class Algeb {
     const scope = {
       value: currentValue,
       loading: false,
+      error: null,
     }
 
     let renew = () => Promise.resolve(currentValue)
@@ -29,21 +30,29 @@ export class Algeb {
         scope.value = some
         renew = fetchSome
         affect(() => {
-          const openLoading = () => {
+          const prepare = () => {
+            scope.error = null
             scope.loading = true
             this.detectorRef.detectChanges()
           }
-          const closeLoading = () => {
+          const done = () => {
+            scope.loading = false
+            this.detectorRef.detectChanges()
+          }
+          const fail = (error) => {
+            scope.error = error
             scope.loading = false
             this.detectorRef.detectChanges()
           }
 
-          lifecycle.on('beforeFlush', openLoading)
-          lifecycle.on('afterAffect', closeLoading)
+          lifecycle.on('beforeAffect', prepare)
+          lifecycle.on('afterAffect', done)
+          lifecycle.on('fail', fail)
 
           return () => {
-            lifecycle.off('beforeFlush', openLoading)
-            lifecycle.off('afterAffect', closeLoading)
+            lifecycle.off('beforeAffect', prepare)
+            lifecycle.off('afterAffect', done)
+            lifecycle.off('fail', fail)
           }
         }, [])
         this.detectorRef.detectChanges()
