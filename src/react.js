@@ -29,7 +29,7 @@ export function useSource(source, ...params) {
   const ref = useRef([currentValue, () => Promise.resolve(currentValue)])
 
   const args = useShallowLatest(params)
-  const [loading, setLoading] = useState(false)
+  const [pending, setpending] = useState(false)
   const forceUpdate = useForceUpdate()
   const [error, setError] = useState(null)
 
@@ -50,20 +50,20 @@ export function useSource(source, ...params) {
         const prepare = () => {
           if (!isUnmounted.current) {
             setError(null)
-            setLoading(true)
+            setpending(true)
             forceUpdate()
           }
         }
         const done = () => {
           if (!isUnmounted.current) {
-            setLoading(false)
+            setpending(false)
             forceUpdate()
           }
         }
         const fail = (error) => {
           if (!isUnmounted.current) {
             setError(error)
-            setLoading(false)
+            setpending(false)
             forceUpdate()
           }
         }
@@ -82,5 +82,5 @@ export function useSource(source, ...params) {
     return stop
   }, [source, args])
 
-  return [...ref.current, loading, error]
+  return [...ref.current, pending, error]
 }

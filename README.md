@@ -342,14 +342,14 @@ import { useSource } from 'algeb/react'
 
 function MyComponent(props) {
   const { id } = props
-  const [data, renew, loading, error] = useSource(SomeSource, id)
+  const [data, renew, pending, error] = useSource(SomeSource, id)
   // ...
 }
 ```
 
 - data: 得到的数据
 - renew: 重新拉取的函数
-- loading: boolean 是否处于请求过程中
+- pending: boolean 是否处于请求过程中
 - error??: Error 出错时抛出的错误
 
 ## Vue中使用
@@ -362,8 +362,8 @@ import { useSource } from 'algeb/vue'
 export default {
   setup(props) {
     const { id } = props
-    const [data, renew, loading, error] = useSource(SomeSource, id)
-    // ...
+    const [data, renew, pending, error] = useSource(SomeSource, id)
+    // 其中除了renew之外，其他3个都是computed对象
   }
 }
 ```
@@ -377,7 +377,7 @@ module.exports = ['$scope', '$stateParams', function($scope, $stateParams) {
   const { id } = $stateParams
   const [data, renew] = useSource(SomeSource, id)($scope)
   // data.value
-  // data.loading
+  // data.pending
   // data.error
 }]
 ```
@@ -396,7 +396,7 @@ class MyComponent {
   constructor(private algeb:Algeb) {
     const [data, renew] = this.algeb.useSource(SomeSource, this.id)
     // data.value
-    // data.loading
+    // data.pending
     // data.error
     this.data = data
     this.renew = renew

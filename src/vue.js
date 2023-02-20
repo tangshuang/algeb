@@ -5,8 +5,8 @@ export function useSource(source, ...params) {
   const currentValue = isSource(source) ? get(source, ...params) : source
   const dataRef = shallowRef(currentValue)
   const data = computed(() => dataRef.value)
-  const loadingRef = ref(false)
-  const loading = computed(() => loadingRef.value)
+  const pendingRef = ref(false)
+  const pending = computed(() => pendingRef.value)
   const errorRef = ref(null)
   const error = computed(() => errorRef.value)
 
@@ -20,13 +20,13 @@ export function useSource(source, ...params) {
       affect(() => {
         const prepare = () => {
           errorRef.value = null
-          loadingRef.value = true
+          pendingRef.value = true
         }
         const done = () => {
-          loadingRef.value = false
+          pendingRef.value = false
         }
         const fail = (error) => {
-          loadingRef.value = false
+          pendingRef.value = false
           errorRef.value = error
         }
 
@@ -45,5 +45,5 @@ export function useSource(source, ...params) {
     onUnmounted(stop)
   }
 
-  return [data, renew, loading, error]
+  return [data, renew, pending, error]
 }

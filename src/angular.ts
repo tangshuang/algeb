@@ -18,7 +18,7 @@ export class Algeb {
 
     const scope = {
       value: currentValue,
-      loading: false,
+      pending: false,
       error: null,
     }
 
@@ -32,16 +32,16 @@ export class Algeb {
         affect(() => {
           const prepare = () => {
             scope.error = null
-            scope.loading = true
+            scope.pending = true
             this.detectorRef.detectChanges()
           }
           const done = () => {
-            scope.loading = false
+            scope.pending = false
             this.detectorRef.detectChanges()
           }
           const fail = (error) => {
             scope.error = error
-            scope.loading = false
+            scope.pending = false
             this.detectorRef.detectChanges()
           }
 

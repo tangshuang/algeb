@@ -6,7 +6,7 @@ export function useSource(source, ...params) {
 
     const scope = {
       value: currentValue,
-      loading: false,
+      pending: false,
     }
 
     let renew = () => Promise.resolve(currentValue)
@@ -19,16 +19,16 @@ export function useSource(source, ...params) {
         affect(() => {
           const prepare = () => {
             scope.error = null
-            scope.loading = true
+            scope.pending = true
             $scope.$applyAsync()
           }
           const done = () => {
-            scope.loading = false
+            scope.pending = false
             $scope.$applyAsync()
           }
           const fail = (error) => {
             scope.error = error
-            scope.loading = false
+            scope.pending = false
             $scope.$applyAsync()
           }
 
