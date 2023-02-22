@@ -1,9 +1,10 @@
 spec/
 dist/
 .cache/
-
+example/
 .build/
+.parcel-cache/
+.parcelrc
 .babelrc
-
 babel.config.js
 gulpfile.js
