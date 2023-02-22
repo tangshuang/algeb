@@ -34,8 +34,8 @@ Event.prototype.off = function(type, fn) {
     }
   })
 }
-Event.prototype.has = function(type, fn) {
-  return this.listeners.some(item => item.type === type && item.fn === fn)
+Event.prototype.has = function(type) {
+  return this.listeners.some(item => item.type === type)
 }
 Event.prototype.clear = function() {
   this.listeners = []
@@ -161,7 +161,7 @@ function querySource(source, ...params) {
     return [atom.value, atom.next, atom.deferer]
   }
 
-  const event = events[hash] || new Event()
+  const event = events[hash] = events[hash] || new Event()
   // 默认原子
   const item = {
     hash,
@@ -171,9 +171,9 @@ function querySource(source, ...params) {
 
   const prepareFlush = () => {
     const prev = item.value
-    item.event.emit('beforeAffect', prev)
+    event.emit('beforeAffect', prev)
     propagatePrepareFlush(item)
-    item.event.emit('beforeFlush', prev)
+    event.emit('beforeFlush', prev)
   }
 
   const next = () => {
@@ -189,19 +189,19 @@ function querySource(source, ...params) {
     item.deferer = Promise.resolve(res)
       .then((value) => {
         item.value = value
-        item.event.emit('afterFlush', value, prev)
+        event.emit('afterFlush', value, prev)
 
         propagateAffect(item)
-        item.event.emit('afterAffect', value, prev)
+        event.emit('afterAffect', value, prev)
 
-        item.event.emit('done', value)
+        event.emit('done', value)
         return value
       }, (e) => {
-        item.event.emit('fail', e)
+        event.emit('fail', e)
       })
       .finally(() => {
         item.defering = 0
-        item.event.emit('finish')
+        event.emit('finish')
       })
 
     return item.deferer
@@ -231,7 +231,7 @@ function queryCompose(source, ...params) {
     return [atom.value, atom.broadcast, atom.deferer]
   }
 
-  const event = events[hash] || new Event()
+  const event = events[hash] = events[hash] || new Event()
   const item = {
     hash,
     value,
@@ -249,19 +249,19 @@ function queryCompose(source, ...params) {
 
   const prepareFlush = () => {
     const prev = item.value
-    item.event.emit('beforeAffect', prev)
+    event.emit('beforeAffect', prev)
     propagatePrepareFlush(item)
-    item.event.emit('beforeFlush', prev)
+    event.emit('beforeFlush', prev)
   }
   const next = () => {
     const prev = item.value
 
     run(item)
     const next = item.value
-    item.event.emit('afterFlush', next, prev)
+    event.emit('afterFlush', next, prev)
 
     propagateAffect(item)
-    item.event.emit('afterAffect', next, prev)
+    event.emit('afterAffect', next, prev)
 
     return Promise.resolve(next)
   }
@@ -280,13 +280,13 @@ function queryCompose(source, ...params) {
     const defer = (reqs) => {
       item.deferer = Promise.all(reqs)
         .then(() => {
-          item.event.emit('done', item.value)
+          event.emit('done', item.value)
           return item.value
         }, (e) => {
-          item.event.emit('fail', e)
+          event.emit('fail', e)
         })
         .finally(() => {
-          item.event.emit('finish')
+          event.emit('finish')
         })
       return item.deferer
     }
@@ -444,7 +444,7 @@ export function isSource(source) {
 }
 
 /**
- * 获取数据，从仓库中直接获取
+ * 获取数据，从仓库中直接获取（缓存）
  * @param {*} source
  * @param  {...any} params
  * @returns
