@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "parcel ./spec/index.html",
+    "dev:react": "parcel ./example/react/index.html",
     "build": "gulp"
   },
   "repository": {
@@ -14,6 +15,7 @@
   "author": "tangshuang",
   "license": "MIT",
   "dependencies": {
+    "algeb": "^4.0.0",
     "ts-fns": "^11.1.0"
   },
   "devDependencies": {
@@ -23,9 +25,15 @@
     "del": "^6.1.1",
     "gulp": "^4.0.2",
     "gulp-babel": "^8.0.0",
-    "parcel-bundler": "^1.12.4"
+    "parcel": "^2.8.3",
+    "process": "^0.11.10",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
   },
   "browserslist": [
     "last 1 Chrome version"
-  ]
+  ],
+  "alias": {
+    "algeb": "./src/"
+  }
 }

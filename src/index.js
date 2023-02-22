@@ -47,7 +47,6 @@ export function source(get, value) {
     get,
     atoms: [],
     value,
-    events: {},
   }
   return source
 }
@@ -61,7 +60,6 @@ export function compose(get) {
     get,
     atoms: [],
     value,
-    events: {},
   }
   return source
 }
@@ -151,7 +149,7 @@ const host = (atom) => {
 }
 
 function querySource(source, ...params) {
-  const { atoms, value, get, events } = source
+  const { atoms, value, get } = source
   const hash = getObjectHash(params)
   const atom = atoms.find(item => item.hash === hash)
 
@@ -161,7 +159,7 @@ function querySource(source, ...params) {
     return [atom.value, atom.next, atom.deferer]
   }
 
-  const event = events[hash] = events[hash] || new Event()
+  const event = source.event = source.event || new Event()
   // 默认原子
   const item = {
     hash,
@@ -171,9 +169,15 @@ function querySource(source, ...params) {
 
   const prepareFlush = () => {
     const prev = item.value
-    event.emit('beforeAffect', prev)
+    event.emit('beforeAffect', {
+      args: params,
+      prev,
+    })
     propagatePrepareFlush(item)
-    event.emit('beforeFlush', prev)
+    event.emit('beforeFlush', {
+      args: params,
+      prev,
+    })
   }
 
   const next = () => {
@@ -189,19 +193,36 @@ function querySource(source, ...params) {
     item.deferer = Promise.resolve(res)
       .then((value) => {
         item.value = value
-        event.emit('afterFlush', value, prev)
+        event.emit('afterFlush', {
+          args: params,
+          next: value,
+          prev,
+        })
 
         propagateAffect(item)
-        event.emit('afterAffect', value, prev)
+        event.emit('afterAffect', {
+          args: params,
+          next: value,
+          prev,
+        })
 
-        event.emit('done', value)
+        event.emit('done', {
+          args: params,
+          next: value,
+          prev,
+        })
         return value
       }, (e) => {
-        event.emit('fail', e)
+        event.emit('fail', {
+          args: params,
+          error: e,
+        })
       })
       .finally(() => {
         item.defering = 0
-        event.emit('finish')
+        event.emit('finish', {
+          args: params,
+        })
       })
 
     return item.deferer
@@ -222,7 +243,7 @@ function querySource(source, ...params) {
 }
 
 function queryCompose(source, ...params) {
-  const { atoms, get, value, events } = source
+  const { atoms, get, value } = source
   const hash = getObjectHash(params)
   const atom = atoms.find(item => item.hash === hash)
 
@@ -231,7 +252,7 @@ function queryCompose(source, ...params) {
     return [atom.value, atom.broadcast, atom.deferer]
   }
 
-  const event = events[hash] = events[hash] || new Event()
+  const event = source.event = source.event || new Event()
   const item = {
     hash,
     value,
@@ -249,19 +270,33 @@ function queryCompose(source, ...params) {
 
   const prepareFlush = () => {
     const prev = item.value
-    event.emit('beforeAffect', prev)
+    event.emit('beforeAffect', {
+      args: params,
+      prev,
+    })
     propagatePrepareFlush(item)
-    event.emit('beforeFlush', prev)
+    event.emit('beforeFlush', {
+      args: params,
+      prev,
+    })
   }
   const next = () => {
     const prev = item.value
 
     run(item)
     const next = item.value
-    event.emit('afterFlush', next, prev)
+    event.emit('afterFlush', {
+      args: params,
+      next,
+      prev,
+    })
 
     propagateAffect(item)
-    event.emit('afterAffect', next, prev)
+    event.emit('afterAffect', {
+      args: params,
+      next,
+      prev,
+    })
 
     return Promise.resolve(next)
   }
@@ -277,16 +312,27 @@ function queryCompose(source, ...params) {
 
     const deps = item.deps
 
+    const prev = item.value
     const defer = (reqs) => {
       item.deferer = Promise.all(reqs)
         .then(() => {
-          event.emit('done', item.value)
-          return item.value
+          const next = item.value
+          event.emit('done', {
+            args: params,
+            next,
+            prev,
+          })
+          return next
         }, (e) => {
-          event.emit('fail', e)
+          event.emit('fail', {
+            args: params,
+            error: e,
+          })
         })
         .finally(() => {
-          event.emit('finish')
+          event.emit('finish', {
+            args: params,
+          })
         })
       return item.deferer
     }
@@ -477,13 +523,10 @@ export function request(source, ...params) {
 /**
  * 获取该 source 的 lifecycle 对象。
  * @param {*} source
- * @param  {...any} params
  * @returns
  */
-export function subscribe(source, ...params) {
-  const { events } = source
-  const hash = getObjectHash(params)
-  const event = events[hash] = events[hash] || new Event()
+export function subscribe(source) {
+  const event = source.event = source.event || new Event()
   return event
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useLayoutEffect } from 'react'
+import { useEffect, useRef, useState, useLayoutEffect, useMemo } from 'react'
 import { query, setup, isSource, get, subscribe } from 'algeb'
 import { isShallowEqual, isArray, isObject } from 'ts-fns'
 
@@ -25,9 +25,6 @@ function useForceUpdate() {
 }
 
 export function useSource(source, ...params) {
-  const currentValue = isSource(source) ? get(source, ...params) : source
-  const ref = useRef([currentValue, () => Promise.resolve(currentValue)])
-
   const args = useShallowLatest(params)
   const [pending, setPending] = useState(false)
   const forceUpdate = useForceUpdate()
@@ -38,7 +35,7 @@ export function useSource(source, ...params) {
     isUnmounted.current = true
   }, [])
 
-  useEffect(() => {
+  const lifecycle = useMemo(() => {
     if (!isSource(source)) {
       return
     }
@@ -56,30 +53,47 @@ export function useSource(source, ...params) {
         forceUpdate()
       }
     }
-    const fail = (error) => {
+    const fail = (e) => {
       if (!isUnmounted.current) {
-        setError(error)
+        setError(e)
         setPending(false)
         forceUpdate()
       }
     }
 
-    const subscriber = subscribe(source, ...params)
+    const subscriber = subscribe(source)
     subscriber.on('beforeAffect', prepare)
     subscriber.on('afterAffect', done)
     subscriber.on('fail', fail)
+
+    return { subscriber, prepare, done, fail }
+  }, [source])
+
+  useEffect(() => {
+    return () => {
+      if (lifecycle) {
+        const { subscriber, prepare, done, fail } = lifecycle
+        subscriber.off('beforeAffect', prepare)
+        subscriber.off('afterAffect', done)
+        subscriber.off('fail', fail)
+      }
+    }
+  }, [lifecycle])
+
+  const currentValue = isSource(source) ? get(source, ...params) : source
+  const ref = useRef([currentValue, () => Promise.resolve(currentValue)])
+
+  useEffect(() => {
+    if (!isSource(source)) {
+      return
+    }
 
     const stop = setup(() => {
       const [data, renew] = query(source, ...args)
       ref.current = [data, renew]
     })
 
-    return () => {
-      subscriber.off('beforeAffect', prepare)
-      subscriber.off('afterAffect', done)
-      subscriber.off('fail', fail)
-      stop()
-    }
+    return stop
   }, [source, args])
 
   return [...ref.current, pending, error]

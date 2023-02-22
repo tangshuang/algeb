@@ -6,3 +6,4 @@ dist/
 /react.js
 /vue.js
 /index.js
+.parcel-cache

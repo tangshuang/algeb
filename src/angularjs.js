@@ -2,15 +2,10 @@ import { query, setup, isSource, subscribe } from 'algeb'
 
 export function useSource(source, ...params) {
   return function($scope) {
-    const currentValue = isSource(source) ? get(source, ...params) : source
-
     const scope = {
-      value: currentValue,
       pending: false,
       error: null,
     }
-
-    let renew = () => Promise.resolve(currentValue)
 
     if (isSource(source)) {
       const prepare = () => {
@@ -22,30 +17,37 @@ export function useSource(source, ...params) {
         scope.pending = false
         $scope.$applyAsync()
       }
-      const fail = (error) => {
-        scope.error = error
+      const fail = (e) => {
+        scope.error = e
         scope.pending = false
         $scope.$applyAsync()
       }
 
-      const subscriber = subscribe(source, ...params)
+      const subscriber = subscribe(source)
       subscriber.on('beforeAffect', prepare)
       subscriber.on('afterAffect', done)
       subscriber.on('fail', fail)
-
-      const stop = setup(function() {
-        const [some, fetchSome, , lifecycle] = query(source, ...params)
-        scope.value = some
-        renew = fetchSome
-        $scope.$applyAsync()
-      })
 
       $scope.$on('$destroy', () => {
         subscriber.off('beforeAffect', prepare)
         subscriber.off('afterAffect', done)
         subscriber.off('fail', fail)
-        stop()
       })
+    }
+
+    const currentValue = isSource(source) ? get(source, ...params) : source
+    scope.value = currentValue
+    let renew = () => Promise.resolve(currentValue)
+
+    if (isSource(source)) {
+      const stop = setup(function() {
+        const [some, fetchAgain] = query(source, ...params)
+        scope.value = some
+        renew = fetchAgain
+        $scope.$applyAsync()
+      })
+
+      $scope.$on('$destroy', stop)
     }
 
     return [scope, (...args) => renew(...args)]

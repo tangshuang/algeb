@@ -305,7 +305,7 @@ release([Book, Photo])
 
 注意：基于不同参数得到的不同数据，将被全部释放，新的query都会重新请求数据。
 
-### subscribe(source, ...params)
+### subscribe(source)
 
 获取该 source 的 lifecycle 对象。
 
@@ -314,7 +314,7 @@ release([Book, Photo])
 ```js
 
 const lifecycle = subscribe(Book, bookId)
-const print = () => console.log('beforeFlush')
+const print = ({ args }) => console.log('beforeFlush', args)
 // 监听beforeFlush，并执行print函数
 lifecycle.on('beforeFlush', print)
 // 取消该监听
