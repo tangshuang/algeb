@@ -1,5 +1,5 @@
 import { shallowRef, computed, onUnmounted, ref } from 'vue'
-import { query, setup, affect, get, isSource } from 'algeb'
+import { query, setup, get, isSource, subscribe } from 'algeb'
 
 export function useSource(source, ...params) {
   const currentValue = isSource(source) ? get(source, ...params) : source
@@ -13,37 +13,36 @@ export function useSource(source, ...params) {
   let renew = () => Promise.resolve(data)
 
   if (isSource(source)) {
+    const prepare = () => {
+      errorRef.value = null
+      pendingRef.value = true
+    }
+    const done = () => {
+      pendingRef.value = false
+    }
+    const fail = (error) => {
+      pendingRef.value = false
+      errorRef.value = error
+    }
+
+    const subscriber = subscribe(source, ...params)
+    subscriber.on('beforeAffect', prepare)
+    subscriber.on('afterAffect', done)
+    subscriber.on('fail', fail)
+
     const stop = setup(function() {
-      const [some, fetchSome, , lifecycle] = query(source, ...params)
+      const [some, fetchAgain] = query(source, ...params)
       dataRef.value = some
-      renew = fetchSome
-      affect(() => {
-        const prepare = () => {
-          errorRef.value = null
-          pendingRef.value = true
-        }
-        const done = () => {
-          pendingRef.value = false
-        }
-        const fail = (error) => {
-          pendingRef.value = false
-          errorRef.value = error
-        }
-
-        lifecycle.on('beforeAffect', prepare)
-        lifecycle.on('afterAffect', done)
-        lifecycle.on('fail', fail)
-
-        return () => {
-          lifecycle.off('beforeAffect', prepare)
-          lifecycle.off('afterAffect', done)
-          lifecycle.off('fail', fail)
-        }
-      }, [])
+      renew = fetchAgain
     })
 
-    onUnmounted(stop)
+    onUnmounted(() => {
+      subscriber.off('beforeAffect', prepare)
+      subscriber.off('afterAffect', done)
+      subscriber.off('fail', fail)
+      stop()
+    })
   }
 
-  return [data, renew, pending, error]
+  return [data, (...args) => renew(...args), pending, error]
 }

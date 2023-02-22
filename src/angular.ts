@@ -1,5 +1,5 @@
 import { Injectable, ChangeDetectorRef } from '@angular/core'
-import { query, setup, affect, get, isSource } from 'algeb'
+import { query, setup, affect, get, isSource, subscribe } from 'algeb'
 
 interface Source {
   value: any,
@@ -22,45 +22,45 @@ export class Algeb {
       error: null,
     }
 
-    let renew = () => Promise.resolve(currentValue)
+    let renew = (...args) => Promise.resolve(currentValue)
 
     if (isSource(source)) {
+      const prepare = () => {
+        scope.error = null
+        scope.pending = true
+        this.detectorRef.detectChanges()
+      }
+      const done = () => {
+        scope.pending = false
+        this.detectorRef.detectChanges()
+      }
+      const fail = (error) => {
+        scope.error = error
+        scope.pending = false
+        this.detectorRef.detectChanges()
+      }
+
+      const subscriber = subscribe(source, ...params)
+      subscriber.on('beforeAffect', prepare)
+      subscriber.on('afterAffect', done)
+      subscriber.on('fail', fail)
+
       const stop = setup(function() {
         const [some, fetchSome, , lifecycle] = query(source, ...params)
         scope.value = some
         renew = fetchSome
-        affect(() => {
-          const prepare = () => {
-            scope.error = null
-            scope.pending = true
-            this.detectorRef.detectChanges()
-          }
-          const done = () => {
-            scope.pending = false
-            this.detectorRef.detectChanges()
-          }
-          const fail = (error) => {
-            scope.error = error
-            scope.pending = false
-            this.detectorRef.detectChanges()
-          }
-
-          lifecycle.on('beforeAffect', prepare)
-          lifecycle.on('afterAffect', done)
-          lifecycle.on('fail', fail)
-
-          return () => {
-            lifecycle.off('beforeAffect', prepare)
-            lifecycle.off('afterAffect', done)
-            lifecycle.off('fail', fail)
-          }
-        }, [])
         this.detectorRef.detectChanges()
       })
-      this.destroies.push(stop)
+
+      this.destroies.push(() => {
+        subscriber.off('beforeAffect', prepare)
+        subscriber.off('afterAffect', done)
+        subscriber.off('fail', fail)
+        stop()
+      })
     }
 
-    return [scope, renew]
+    return [scope, (...args) => renew(...args)]
   }
 
   ngOnDestroy() {

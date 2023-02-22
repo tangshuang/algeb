@@ -1,4 +1,4 @@
-import { query, setup, affect, isSource } from 'algeb'
+import { query, setup, isSource, subscribe } from 'algeb'
 
 export function useSource(source, ...params) {
   return function($scope) {
@@ -7,47 +7,47 @@ export function useSource(source, ...params) {
     const scope = {
       value: currentValue,
       pending: false,
+      error: null,
     }
 
     let renew = () => Promise.resolve(currentValue)
 
     if (isSource(source)) {
+      const prepare = () => {
+        scope.error = null
+        scope.pending = true
+        $scope.$applyAsync()
+      }
+      const done = () => {
+        scope.pending = false
+        $scope.$applyAsync()
+      }
+      const fail = (error) => {
+        scope.error = error
+        scope.pending = false
+        $scope.$applyAsync()
+      }
+
+      const subscriber = subscribe(source, ...params)
+      subscriber.on('beforeAffect', prepare)
+      subscriber.on('afterAffect', done)
+      subscriber.on('fail', fail)
+
       const stop = setup(function() {
         const [some, fetchSome, , lifecycle] = query(source, ...params)
         scope.value = some
         renew = fetchSome
-        affect(() => {
-          const prepare = () => {
-            scope.error = null
-            scope.pending = true
-            $scope.$applyAsync()
-          }
-          const done = () => {
-            scope.pending = false
-            $scope.$applyAsync()
-          }
-          const fail = (error) => {
-            scope.error = error
-            scope.pending = false
-            $scope.$applyAsync()
-          }
-
-          lifecycle.on('beforeAffect', prepare)
-          lifecycle.on('afterAffect', done)
-          lifecycle.on('fail', fail)
-
-          return () => {
-            lifecycle.off('beforeAffect', prepare)
-            lifecycle.off('afterAffect', done)
-            lifecycle.off('fail', fail)
-          }
-        }, [])
         $scope.$applyAsync()
       })
 
-      $scope.$on('$destroy', stop)
+      $scope.$on('$destroy', () => {
+        subscriber.off('beforeAffect', prepare)
+        subscriber.off('afterAffect', done)
+        subscriber.off('fail', fail)
+        stop()
+      })
     }
 
-    return [scope, renew]
+    return [scope, (...args) => renew(...args)]
   }
 }

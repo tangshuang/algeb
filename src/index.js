@@ -37,7 +37,9 @@ Event.prototype.off = function(type, fn) {
 Event.prototype.has = function(type, fn) {
   return this.listeners.some(item => item.type === type && item.fn === fn)
 }
-
+Event.prototype.clear = function() {
+  this.listeners = []
+}
 
 export function source(get, value) {
   const source = {
@@ -45,6 +47,7 @@ export function source(get, value) {
     get,
     atoms: [],
     value,
+    events: {},
   }
   return source
 }
@@ -58,6 +61,7 @@ export function compose(get) {
     get,
     atoms: [],
     value,
+    events: {},
   }
   return source
 }
@@ -147,21 +151,22 @@ const host = (atom) => {
 }
 
 function querySource(source, ...params) {
-  const { atoms, value, get } = source
+  const { atoms, value, get, events } = source
   const hash = getObjectHash(params)
   const atom = atoms.find(item => item.hash === hash)
 
   // 找到对应的原子
   if (atom) {
     host(atom)
-    return [atom.value, atom.next, atom.deferer, atom.event]
+    return [atom.value, atom.next, atom.deferer]
   }
 
+  const event = events[hash] || new Event()
   // 默认原子
   const item = {
     hash,
     value,
-    event: new Event(),
+    event,
   }
 
   const prepareFlush = () => {
@@ -213,25 +218,26 @@ function querySource(source, ...params) {
   // 加入图中
   host(item)
 
-  return [item.value, next, item.deferer, item.event]
+  return [item.value, next, item.deferer]
 }
 
 function queryCompose(source, ...params) {
-  const { atoms, get, value } = source
+  const { atoms, get, value, events } = source
   const hash = getObjectHash(params)
   const atom = atoms.find(item => item.hash === hash)
 
   if (atom) {
     host(atom)
-    return [atom.value, atom.broadcast, atom.deferer, atom.event]
+    return [atom.value, atom.broadcast, atom.deferer]
   }
 
+  const event = events[hash] || new Event()
   const item = {
     hash,
     value,
     deps: [],
     hooks: [],
-    event: new Event(),
+    event,
   }
 
   const run = () => {
@@ -317,7 +323,7 @@ function queryCompose(source, ...params) {
   const deps = item.deps
   item.deferer = Promise.all(deps.filter(dep => dep.deferer).map(dep => dep.deferer)).then(() => item.value)
 
-  return [item.value, broadcast, item.deferer, item.event]
+  return [item.value, broadcast, item.deferer]
 }
 
 // 解除全部effects，避免内存泄露
@@ -466,6 +472,19 @@ export function request(source, ...params) {
   }
 
   throw new Error(`[alegb]: request只能使用action和原子source，不能使用复合source`);
+}
+
+/**
+ * 获取该 source 的 lifecycle 对象。
+ * @param {*} source
+ * @param  {...any} params
+ * @returns
+ */
+export function subscribe(source, ...params) {
+  const { events } = source
+  const hash = getObjectHash(params)
+  const event = events[hash] = events[hash] || new Event()
+  return event
 }
 
 // hooks -------------

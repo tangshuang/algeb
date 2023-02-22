@@ -45,43 +45,13 @@ const Book = source(async function(bookId) {
 获取源数据。
 
 ```js
-const [book, refetch, deferer, lifecycle] = query(Book, bookId)
+const [book, refetch, deferer] = query(Book, bookId)
 ```
 
-我们得到一个只有4个值的数组，第一个值是当前Book的真实数据，第二个值是重新获取最新的数据的触发函数（该触发函数只触发请求，不返回结果），第三个值是对应数据的获取Promise，第四个值是一个辅助的lifecycle对象（用于在数据的请求前后执行某些动作）。
+我们得到一个只有4个值的数组，第一个值是当前Book的真实数据，第二个值是重新获取最新的数据的触发函数（该触发函数只触发请求，不返回结果），第三个值是对应数据的获取Promise。
 
 - Source 由`source`或`compose`创建的源。
 - params 传给`source`或`compose`第一个参数函数的参数。
-
-来看下lifecycle的用法：
-
-```js
-setup(() => {
-  const const [book, refetch, deferer, lifecycle] = query(Book, bookId)
-  // 必须在affect中进行
-  affect(() => {
-    const print = () => console.log('beforeFlush')
-    // 监听beforeFlush，并执行print函数
-    lifecycle.on('beforeFlush', print)
-    // affect卸载函数
-    return () => {
-      lifecycle.off('beforeFlush', print)
-    }
-  }, [])
-})
-```
-
-目前支持的生命周期钩子：
-
-- beforeAffect 在一切行动开始之前
-- beforeFlush 在源数据被修改之前
-- afterFlush 在源数据被修改之后
-- afterAffect 在完成数据拉取并产生实际的影响（比如触发setup的重新执行）之后
-- done 执行source get函数（请求数据）成功时
-- fail 执行source get函数（请求数据）失败时，可用于捕获ajax请求的错误信息或在get函数中主动/被动reject的错误信息
-- finish 单次执行数据获取结束，即使fail被触发，也会进入finish生命周期
-
-需要注意，Compound Source 和普通 Source 不同，因为 Compound Source 是依赖其他普通 Source 的，如果普通 Source 执行结束，就会对 Compound Source 产生影响，因此，Compound Source 的 afterFlush, afterAffect 会在每次普通 Source 执行结束时被触发，因此，它们的执行顺序是不确定的。基于相同的道理，Source 的 done, finish 无法替代 Compound Source 的 done, finish（fail 会被通知）。因此，对于 Compound Source 而言，只有主动调用其 renew 函数，才会触发 done, finish，否则只会被 Source 的更新所影响，这一点对于编程而言，其实不是很友好，需要你在开发过程中比较小心的使用。这种情况下，推荐只使用 beforeAffect, afterAffect, fail 这三个周期钩子来处理某些交互（beforeAffect 表示开始, afterAffect 表示成功，fail表示失败，需要在 afterAffect, fail 中都进行重置操作）。
 
 下文会在`setup`部分详细讲`refetch`的运行机制。
 
@@ -334,6 +304,34 @@ release([Book, Photo])
 ```
 
 注意：基于不同参数得到的不同数据，将被全部释放，新的query都会重新请求数据。
+
+### subscribe(source, ...params)
+
+获取该 source 的 lifecycle 对象。
+
+来看下lifecycle的用法：
+
+```js
+
+const lifecycle = subscribe(Book, bookId)
+const print = () => console.log('beforeFlush')
+// 监听beforeFlush，并执行print函数
+lifecycle.on('beforeFlush', print)
+// 取消该监听
+lifecycle.off('beforeFlush', print)
+```
+
+目前支持的生命周期钩子：
+
+- beforeAffect 在一切行动开始之前
+- beforeFlush 在源数据被修改之前
+- afterFlush 在源数据被修改之后
+- afterAffect 在完成数据拉取并产生实际的影响（比如触发setup的重新执行）之后
+- done 执行source get函数（请求数据）成功时
+- fail 执行source get函数（请求数据）失败时，可用于捕获ajax请求的错误信息或在get函数中主动/被动reject的错误信息
+- finish 单次执行数据获取结束，即使fail被触发，也会进入finish生命周期
+
+需要注意，Compound Source 和普通 Source 不同，因为 Compound Source 是依赖其他普通 Source 的，如果普通 Source 执行结束，就会对 Compound Source 产生影响，因此，Compound Source 的 afterFlush, afterAffect 会在每次普通 Source 执行结束时被触发，因此，它们的执行顺序是不确定的。基于相同的道理，Source 的 done, finish 无法替代 Compound Source 的 done, finish（fail 会被通知）。因此，对于 Compound Source 而言，只有主动调用其 renew 函数，才会触发 done, finish，否则只会被 Source 的更新所影响，这一点对于编程而言，其实不是很友好，需要你在开发过程中比较小心的使用。这种情况下，推荐只使用 beforeAffect, afterAffect, fail 这三个周期钩子来处理某些交互（beforeAffect 表示开始, afterAffect 表示成功，fail表示失败，需要在 afterAffect, fail 中都进行重置操作）。
 
 ## React中使用
 

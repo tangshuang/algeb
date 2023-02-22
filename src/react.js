@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useLayoutEffect } from 'react'
-import { query, setup, isSource, affect, get } from 'algeb'
+import { query, setup, isSource, get, subscribe } from 'algeb'
 import { isShallowEqual, isArray, isObject } from 'ts-fns'
 
 function useShallowLatest(obj) {
@@ -29,7 +29,7 @@ export function useSource(source, ...params) {
   const ref = useRef([currentValue, () => Promise.resolve(currentValue)])
 
   const args = useShallowLatest(params)
-  const [pending, setpending] = useState(false)
+  const [pending, setPending] = useState(false)
   const forceUpdate = useForceUpdate()
   const [error, setError] = useState(null)
 
@@ -43,43 +43,43 @@ export function useSource(source, ...params) {
       return
     }
 
+    const prepare = () => {
+      if (!isUnmounted.current) {
+        setError(null)
+        setPending(true)
+        forceUpdate()
+      }
+    }
+    const done = () => {
+      if (!isUnmounted.current) {
+        setPending(false)
+        forceUpdate()
+      }
+    }
+    const fail = (error) => {
+      if (!isUnmounted.current) {
+        setError(error)
+        setPending(false)
+        forceUpdate()
+      }
+    }
+
+    const subscriber = subscribe(source, ...params)
+    subscriber.on('beforeAffect', prepare)
+    subscriber.on('afterAffect', done)
+    subscriber.on('fail', fail)
+
     const stop = setup(() => {
-      const [data, renew, , lifecycle] = query(source, ...args)
+      const [data, renew] = query(source, ...args)
       ref.current = [data, renew]
-      affect(() => {
-        const prepare = () => {
-          if (!isUnmounted.current) {
-            setError(null)
-            setpending(true)
-            forceUpdate()
-          }
-        }
-        const done = () => {
-          if (!isUnmounted.current) {
-            setpending(false)
-            forceUpdate()
-          }
-        }
-        const fail = (error) => {
-          if (!isUnmounted.current) {
-            setError(error)
-            setpending(false)
-            forceUpdate()
-          }
-        }
-
-        lifecycle.on('beforeAffect', prepare)
-        lifecycle.on('afterAffect', done)
-        lifecycle.on('fail', fail)
-
-        return () => {
-          lifecycle.off('beforeAffect', prepare)
-          lifecycle.off('afterAffect', done)
-          lifecycle.off('fail', fail)
-        }
-      }, [])
     })
-    return stop
+
+    return () => {
+      subscriber.off('beforeAffect', prepare)
+      subscriber.off('afterAffect', done)
+      subscriber.off('fail', fail)
+      stop()
+    }
   }, [source, args])
 
   return [...ref.current, pending, error]
