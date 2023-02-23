@@ -25,7 +25,6 @@ function useForceUpdate() {
 }
 
 export function useSource(source, ...params) {
-  const args = useShallowLatest(params)
   const [pending, setPending] = useState(false)
   const forceUpdate = useForceUpdate()
   const [error, setError] = useState(null)
@@ -80,8 +79,10 @@ export function useSource(source, ...params) {
     }
   }, [lifecycle])
 
+  const args = useShallowLatest(params)
   const currentValue = isSource(source) ? get(source, ...params) : source
-  const ref = useRef([currentValue, () => Promise.resolve(currentValue)])
+  const [data, setData] = useState(currentValue)
+  const renewRef = useRef(() => Promise.resolve(currentValue))
 
   useEffect(() => {
     if (!isSource(source)) {
@@ -90,11 +91,12 @@ export function useSource(source, ...params) {
 
     const stop = setup(() => {
       const [data, renew] = query(source, ...args)
-      ref.current = [data, renew]
+      setData(data)
+      renewRef.current = renew
     })
 
     return stop
   }, [source, args])
 
-  return [...ref.current, pending, error]
+  return [data, renewRef.current, pending, error]
 }

@@ -129,6 +129,20 @@ const propagatePrepareFlush = (atom) => {
     }
   })
 }
+const propagateEmitError = (atom, e) => {
+  if (!atom.hosts) {
+    return
+  }
+
+  atom.hosts.forEach((host, i) => {
+    if (host.end) {
+      atom.hosts.splice(i, 1)
+    }
+    else if (host.emitError) {
+      host.emitError(e)
+    }
+  })
+}
 
 // 附加到当前宿主
 const host = (atom) => {
@@ -167,6 +181,10 @@ function querySource(source, ...params) {
     event,
   }
 
+  // 加入图中
+  // 必须先加入，才能在一开始就出发prepareFlush，否则等到加入的时候prepareFlush早就被触发过了
+  host(item)
+
   const prepareFlush = () => {
     const prev = item.value
     event.emit('beforeAffect', {
@@ -178,6 +196,13 @@ function querySource(source, ...params) {
       args: params,
       prev,
     })
+  }
+  const emitError = (e) => {
+    event.emit('fail', {
+      args: params,
+      error: e,
+    })
+    propagateEmitError(item, e)
   }
 
   const next = () => {
@@ -213,10 +238,7 @@ function querySource(source, ...params) {
         })
         return value
       }, (e) => {
-        event.emit('fail', {
-          args: params,
-          error: e,
-        })
+        emitError(e)
       })
       .finally(() => {
         item.defering = 0
@@ -229,15 +251,13 @@ function querySource(source, ...params) {
   }
   item.next = next
   item.prepareFlush = prepareFlush
-
-  // 立即开始请求
-  next()
+  item.emitError = emitError
 
   // 生成好了next, deferer, defering
   atoms.push(item)
 
-  // 加入图中
-  host(item)
+  // 立即开始请求
+  next()
 
   return [item.value, next, item.deferer]
 }
@@ -261,6 +281,10 @@ function queryCompose(source, ...params) {
     event,
   }
 
+  // 加入图中
+  // 必须先加入，才能在一开始就出发prepareFlush，否则等到加入的时候prepareFlush早就被触发过了
+  host(item)
+
   const run = () => {
     HOSTS_CHAIN.push(item)
     const value = get(...params)
@@ -279,6 +303,13 @@ function queryCompose(source, ...params) {
       args: params,
       prev,
     })
+  }
+  const emitError = (e) => {
+    event.emit('fail', {
+      args: params,
+      error: e,
+    })
+    propagateEmitError(item, e)
   }
   const next = () => {
     const prev = item.value
@@ -302,6 +333,7 @@ function queryCompose(source, ...params) {
   }
   item.next = next
   item.prepareFlush = prepareFlush
+  item.emitError = emitError
 
   const broadcast = (...sources) => {
     // 内部会去遍历依赖，并触发依赖的重新计算，
@@ -341,6 +373,9 @@ function queryCompose(source, ...params) {
     if (sources.length) {
       const needs = []
       sources.forEach((source) => {
+        if (!isSource(source)) {
+          return
+        }
         source.atoms.forEach((atom) => {
           if (deps.includes(atom) && !needs.includes(atom)) {
             needs.push(atom)
@@ -355,15 +390,11 @@ function queryCompose(source, ...params) {
     return defer(reqs)
   }
   item.broadcast = broadcast
+  // 生成必备的内容之后才能push
+  atoms.push(item)
 
   // 立即计算
   run(item)
-
-  // 生成必备的内容
-  atoms.push(item)
-
-  // 加入图中
-  host(item)
 
   // 等依赖全部ready之后deferer才resolve
   const deps = item.deps
