@@ -25,13 +25,18 @@ function useForceUpdate() {
 }
 
 export function useSource(source, ...params) {
-  const [pending, setPending] = useState(false)
-  const forceUpdate = useForceUpdate()
-  const [error, setError] = useState(null)
+  const pendingRef = useRef(false)
+  const errorRef = useRef(null)
 
+  const forceUpdate = useForceUpdate()
+
+  const isMounted = useRef(false)
   const isUnmounted = useRef(false)
-  useLayoutEffect(() => () => {
-    isUnmounted.current = true
+  useEffect(() => {
+    isMounted.current = true
+    return () => {
+      isUnmounted.current = true
+    }
   }, [])
 
   const lifecycle = useMemo(() => {
@@ -40,22 +45,23 @@ export function useSource(source, ...params) {
     }
 
     const prepare = () => {
-      if (!isUnmounted.current) {
-        setError(null)
-        setPending(true)
+      pendingRef.current = true
+      errorRef.current = null
+      if (isMounted.current && !isUnmounted.current) {
         forceUpdate()
       }
     }
     const done = () => {
-      if (!isUnmounted.current) {
-        setPending(false)
+      pendingRef.current = false
+      errorRef.current = null
+      if (isMounted.current && !isUnmounted.current) {
         forceUpdate()
       }
     }
     const fail = (e) => {
-      if (!isUnmounted.current) {
-        setError(e)
-        setPending(false)
+      pendingRef.current = false
+      errorRef.current = e
+      if (isMounted.current && !isUnmounted.current) {
         forceUpdate()
       }
     }
@@ -98,5 +104,5 @@ export function useSource(source, ...params) {
     return stop
   }, [source, args])
 
-  return [data, renewRef.current, pending, error]
+  return [data, renewRef.current, pendingRef.current, errorRef.current]
 }
