@@ -15,11 +15,27 @@ let isInitingSource = false
 
 function Event() {
   this.listeners = []
+  this._isAffecting = 0
 }
 Event.prototype.on = function(type, fn) {
   this.listeners.push({ type, fn })
 }
 Event.prototype.emit = function(type, ...args) {
+  // 确保 beforeAffect afterAffect 只执行一次
+  if (type === 'beforeAffect') {
+    this._isAffecting ++
+    if (this._isAffecting !== 1) {
+      return
+    }
+  }
+  else if (type === 'afterAffect') {
+    if (this._isAffecting > 0) {
+      this._isAffecting --
+    }
+    if (this._isAffecting !== 0) {
+      return
+    }
+  }
   this.listeners.forEach((item) => {
     if (item.type !== type) {
       return
@@ -100,8 +116,8 @@ export function query(source, ...params) {
   }
 }
 
-// 向上冒泡
-const propagateAffect = (atom) => {
+// 向上冒泡next，让每个每层的next都得以执行
+const propagateNext = (atom) => {
   if (!atom.hosts) {
     return
   }
@@ -115,7 +131,8 @@ const propagateAffect = (atom) => {
     }
   })
 }
-const propagatePrepareFlush = (atom) => {
+// 向上冒泡事件，只有最顶层的lifecycle被触发
+const propagateEvent = (atom, type, params) => {
   if (!atom.hosts) {
     return
   }
@@ -124,22 +141,13 @@ const propagatePrepareFlush = (atom) => {
     if (host.end) {
       atom.hosts.splice(i, 1)
     }
-    else if (host.prepareFlush) {
-      host.prepareFlush()
+    else if (host.root) {
+      if (host.lifecycle) {
+        host.lifecycle.emit(type, params)
+      }
     }
-  })
-}
-const propagateEmitError = (atom, e) => {
-  if (!atom.hosts) {
-    return
-  }
-
-  atom.hosts.forEach((host, i) => {
-    if (host.end) {
-      atom.hosts.splice(i, 1)
-    }
-    else if (host.emitError) {
-      host.emitError(e)
+    else {
+      propagateEvent(host, type, params)
     }
   })
 }
@@ -173,37 +181,15 @@ function querySource(source, ...params) {
     return [atom.value, atom.next, atom.deferer]
   }
 
-  const event = source.event = source.event || new Event()
   // 默认原子
   const item = {
     hash,
     value,
-    event,
   }
 
   // 加入图中
   // 必须先加入，才能在一开始就出发prepareFlush，否则等到加入的时候prepareFlush早就被触发过了
   host(item)
-
-  const prepareFlush = () => {
-    const prev = item.value
-    event.emit('beforeAffect', {
-      args: params,
-      prev,
-    })
-    propagatePrepareFlush(item)
-    event.emit('beforeFlush', {
-      args: params,
-      prev,
-    })
-  }
-  const emitError = (e) => {
-    event.emit('fail', {
-      args: params,
-      error: e,
-    })
-    propagateEmitError(item, e)
-  }
 
   const next = () => {
     if (item.defering) {
@@ -211,47 +197,31 @@ function querySource(source, ...params) {
     }
 
     const prev = item.value
-    prepareFlush()
+    propagateEvent(item, 'beforeAffect')
+    propagateEvent(item, 'beforeFlush', { source, params, prev })
 
     const res = get(...params)
     item.defering = 1
     item.deferer = Promise.resolve(res)
       .then((value) => {
         item.value = value
-        event.emit('afterFlush', {
-          args: params,
-          next: value,
-          prev,
-        })
-
-        propagateAffect(item)
-        event.emit('afterAffect', {
-          args: params,
-          next: value,
-          prev,
-        })
-
-        event.emit('done', {
-          args: params,
-          next: value,
-          prev,
-        })
-        return value
-      }, (e) => {
-        emitError(e)
-      })
-      .finally(() => {
+        propagateEvent(item, 'success', { source, params, prev, next: value })
+        propagateEvent(item, 'finish', { source, params })
+        propagateEvent(item, 'afterFlush', { source, params, prev, next: value })
         item.defering = 0
-        event.emit('finish', {
-          args: params,
-        })
+        propagateNext(item) // 往上冒泡
+        propagateEvent(item, 'afterAffect')
+        return value
+      }, (error) => {
+        propagateEvent(item, 'fail', { source, params, error })
+        propagateEvent(item, 'finish', { source, params })
+        item.defering = 0
+        propagateEvent(item, 'afterAffect')
       })
 
     return item.deferer
   }
   item.next = next
-  item.prepareFlush = prepareFlush
-  item.emitError = emitError
 
   // 生成好了next, deferer, defering
   atoms.push(item)
@@ -272,13 +242,11 @@ function queryCompose(source, ...params) {
     return [atom.value, atom.broadcast, atom.deferer]
   }
 
-  const event = source.event = source.event || new Event()
   const item = {
     hash,
     value,
     deps: [],
     hooks: [],
-    event,
   }
 
   // 加入图中
@@ -292,79 +260,34 @@ function queryCompose(source, ...params) {
     HOSTS_CHAIN.pop()
   }
 
-  const prepareFlush = () => {
-    const prev = item.value
-    event.emit('beforeAffect', {
-      args: params,
-      prev,
-    })
-    propagatePrepareFlush(item)
-    event.emit('beforeFlush', {
-      args: params,
-      prev,
-    })
-  }
-  const emitError = (e) => {
-    event.emit('fail', {
-      args: params,
-      error: e,
-    })
-    propagateEmitError(item, e)
-  }
   const next = () => {
     const prev = item.value
-
+    propagateEvent(item, 'beforeFlush', { source, params, prev })
     run(item)
     const next = item.value
-    event.emit('afterFlush', {
-      args: params,
-      next,
-      prev,
-    })
-
-    propagateAffect(item)
-    event.emit('afterAffect', {
-      args: params,
-      next,
-      prev,
-    })
-
+    propagateEvent(item, 'afterFlush', { source, params, prev, next })
+    propagateNext(item) // 往上冒泡
     return Promise.resolve(next)
   }
   item.next = next
-  item.prepareFlush = prepareFlush
-  item.emitError = emitError
 
   const broadcast = (...sources) => {
-    // 内部会去遍历依赖，并触发依赖的重新计算，
-    // 而依赖完成重新计算之后，又会回头往上冒泡触发当前source的 `next` `prepareFlush`，因此，不需要关心这两个动作
-    // flush是先捕获再冒泡，beforeFlush类似捕获，afterFlush类似冒泡
-    // affect是先冒泡再捕获，beforeAffect类似冒泡，afterAffect类似捕获
-    // 对于同一个atom，顺序为：beforeAffect -> beforeFlush -> afterFlush -> afterAffect
-
     const deps = item.deps
-
     const prev = item.value
     const defer = (reqs) => {
       item.deferer = Promise.all(reqs)
         .then(() => {
+          // 内部会去遍历依赖，并触发依赖的重新计算，
+          // 而依赖完成重新计算之后，又会回头往上冒泡触发当前source的 `next`，
+          // 因此，此处不需要调用next（next全部是通过 source 冒泡调用的）
           const next = item.value
-          event.emit('done', {
-            args: params,
-            next,
-            prev,
-          })
+          propagateEvent(item, 'success', { source, params, prev, next })
           return next
-        }, (e) => {
-          event.emit('fail', {
-            args: params,
-            error: e,
-          })
+        }, (error) => {
+          propagateEvent(item, 'fail', { source, params, error })
         })
         .finally(() => {
-          event.emit('finish', {
-            args: params,
-          })
+          propagateEvent(item, 'finish', { source, params })
         })
       return item.deferer
     }
@@ -422,34 +345,53 @@ const traverseFree = (host) => {
   }
 }
 
-export function setup(run) {
-  const root = { deps: [], hooks: [], root: true }
+export function setup(run, options = {}) {
+  const { lifecycle, lazy } = options
+  const hasLifecycle = lifecycle && lifecycle instanceof Event
+
+  const atom = {
+    deps: [],
+    hooks: [],
+    root: true,
+  }
   const stop = () => {
-    root.end = true
-    traverseFree(root)
+    atom.end = true
+    traverseFree(atom)
   }
   stop.value = null
   stop.stop = stop
 
+  if (hasLifecycle) {
+    atom.lifecycle = lifecycle
+  }
+
   const next = () => {
-    HOSTS_CHAIN.push(root)
+    HOSTS_CHAIN.push(atom)
     HOOKS_CHAIN.length = 0
     stop.value = run()
     HOSTS_CHAIN.length = 0
     HOOKS_CHAIN.length = 0
   }
-  root.next = next
+  atom.next = next
+  if (lazy) {
+    atom.start = () => {
+      next()
+      delete atom.start
+    }
+  }
 
   stop.next = () => {
     // 还在进行中的，就不需要持续跟进
     if (!atom.end) {
       return
     }
-    root.end = false
+    atom.end = false
     return next()
   }
 
-  next()
+  if (!lazy) {
+    next()
+  }
 
   return stop
 }
@@ -480,7 +422,6 @@ export function release(source, ...params) {
   }
 }
 
-
 /**
  * 抓取，返回抓取的Promise，如果本地已经有了，那么就直接返回本地数据，如果本地没有，就抓取远端的
  * 一般只有第一次抓取才会花比较长时间，后续都是直接返回
@@ -505,6 +446,17 @@ export function renew(source, ...params) {
   return renew()
 }
 
+/**
+ * 获取数据，从仓库中直接获取（缓存），会触发数据请求
+ * @param {*} source
+ * @param  {...any} params
+ * @returns
+ */
+export function get(source, ...params) {
+  const [data] = query(source, ...params)
+  return data
+}
+
 // 普通函数 --------------------------------
 
 /**
@@ -521,14 +473,16 @@ export function isSource(source) {
 }
 
 /**
- * 获取数据，从仓库中直接获取（缓存）
+ * 获取数据，从仓库中直接获取（缓存），不会触发数据请求
  * @param {*} source
  * @param  {...any} params
  * @returns
  */
-export function get(source, ...params) {
-  const [data] = query(source, ...params)
-  return data
+export function read(source, ...params) {
+  const { atoms, value } = source
+  const hash = getObjectHash(params)
+  const atom = atoms.find(item => item.hash === hash)
+  return atom ? atom.value : value
 }
 
 /**
@@ -553,12 +507,10 @@ export function request(source, ...params) {
 
 /**
  * 获取该 source 的 lifecycle 对象。
- * @param {*} source
  * @returns
  */
-export function subscribe(source) {
-  const event = source.event = source.event || new Event()
-  return event
+export function subscribe() {
+  return new Event()
 }
 
 // hooks -------------

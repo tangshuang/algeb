@@ -55,7 +55,7 @@ const [book, refetch, deferer] = query(Book, bookId)
 
 下文会在`setup`部分详细讲`refetch`的运行机制。
 
-### setup(fn)
+### setup(runner)
 
 执行基于源的副作用运算。
 
@@ -70,7 +70,7 @@ setup(function() {
       <button onclick="${refetch}">refresh</button>
     </div>
   `
-})
+}, options)
 ```
 
 当执行该语句之后，setup中的函数会被执行。当refetch函数被调用，触发数据请求，当数据请求完成后，setup中断函数会被再次执行。
@@ -85,6 +85,7 @@ setup返回stop函数，同时，它包含3个静态属性：
   stop(): 停止setup再次执行的机制
   next(): 如果执行完stop后，你又想再次运行这个机制，可以再调用next重新开始，如果没有执行过stop，调用next没有任何效果
   value: fn的返回值，在执行机制中，fn会被反复执行，每次执行后，value都会被修改
+  start?(): 当 options.lazy 为 true 时存在，且只能被调用一次。
 }
 ```
 
@@ -109,6 +110,8 @@ setInterval(() => {
   console.log(ctx.value) // 每次都可能不一样
 }, 1000)
 ```
+
+`options` 目录支持 lifecycle 和 lazy 两个选项，lifecycle 阅读下文。当 lazy 为 true 时，setup 不会立即启动，而是需要你手动调用返回结果中的 start 方法。
 
 ## 高级用法
 
@@ -158,6 +161,46 @@ updateMix(Book) // 只重新请求Book源
 ```
 
 通过compose我们可以组合不同数据源，组合数据源的数据拉取规则，有利于复用一些特定规则。
+
+
+### get(source, ...params)
+
+直接获取当前数据。
+
+```js
+const data = get(Some, 123)
+
+// 等价于
+const [data] = query(Some, 123)
+```
+
+### fetch(source, ...params)
+
+通过Promise获取当前数据（缓存），当前如果没有则从后端拉取过数据。
+
+```js
+const data = await fetch(Some, 123)
+
+// 等价于
+const [, , deferer] = query(Some, 123)
+const data = await deferer
+```
+
+### renew(source, ...params)
+
+你可以使用renew来更新一个数据且缓存它。
+
+```js
+renew(Some, 123)
+
+// 等价于
+const [, renew] = query(Some, 123)
+renew()
+```
+
+请求完成时，对应参数的结构将会被放入仓库中，并触发对应的setup。
+
+注意，`Action`不能用于renew。
 
 ## Hooks
 
@@ -238,6 +281,8 @@ await request(ActionA, id)
 上面这一套机制，就可以保证我们的数据是实时最新的。
 除了单用户本地更新外，我们还可以基于websocket来调用`renew(SourceA, id)`，这样，即使有用户在另外一台电脑上进行了更新，我们也能知道这个更新动作，并更新SourceA中的数据。
 
+注意：`get`, `fetch`, `renew` 也可以在 setup 之外使用，甚至 `query` 也可以，但是，在使用过程中，如果存在上下文中对 setup 有要求，则可能无法得到你预期的结果。
+
 ### action(act)
 
 创建一个仅用于处理副作用的source，该source只能被request使用。
@@ -247,22 +292,6 @@ const Update = action(async (bookId, data) => {
   await patch('/api/books/' + bookId, data) // 提交数据到后台
   request(Book, bookId) // 强制刷新数据
 })
-```
-
-### get(source, ...params)
-
-直接获取当前数据（缓存）。
-
-```js
-const data = get(Some, 123)
-```
-
-### fetch(source, ...params)
-
-通过Promise获取当前数据（缓存），当前如果没有则从后端拉取过数据。
-
-```js
-const data = await fetch(Some, 123)
 ```
 
 ### request(source, ...params)
@@ -277,21 +306,14 @@ const data = await request(source, { id })
 
 注意，`Compound Source`不能用于request。
 
-### renew(source, ...params)
-
-你可以使用renew来更新一个数据且缓存它。
-
-```js
-renew(source, { id })
-```
-
-请求完成时，对应参数的结构将会被放入仓库中，并触发对应的setup。
-
-注意，`Action`不能用于renew。
 
 ### isSource(value)
 
 用于判断一个对象是否为source，返回boolean。
+
+### read(source, ...params)
+
+读取当前值，不会触发内容任何机制，仅仅是一个读值过程。当值不存在时，返回 source 上的默认值。
 
 ### release(source, ...params)
 
@@ -305,33 +327,44 @@ release([Book, Photo])
 
 注意：基于不同参数得到的不同数据，将被全部释放，新的query都会重新请求数据。
 
-### subscribe(source)
+### subscribe()
 
-获取该 source 的 lifecycle 对象。
+创建一个 lifecycle 对象，用于传给 setup，当程序在运行时，在对应生命周期节点上，将会触发给定的函数。
 
 来看下lifecycle的用法：
 
 ```js
+// 第一步，创建 lifecycle 对象
+const lifecycle = subscribe()
 
-const lifecycle = subscribe(Book, bookId)
+// 第二步，订阅 lifecycle 事件
 const print = ({ args }) => console.log('beforeFlush', args)
 // 监听beforeFlush，并执行print函数
 lifecycle.on('beforeFlush', print)
-// 取消该监听
+
+// 第三步，传入 setup
+setup(runner, { lifecycle })
+
+// 第四步：取消订阅
 lifecycle.off('beforeFlush', print)
 ```
 
 目前支持的生命周期钩子：
 
 - beforeAffect 在一切行动开始之前
-- beforeFlush 在源数据被修改之前
-- afterFlush 在源数据被修改之后
-- afterAffect 在完成数据拉取并产生实际的影响（比如触发setup的重新执行）之后
-- done 执行source get函数（请求数据）成功时
+- beforeFlush 在源数据准备开始刷新之前（数据请求发出之前）
+- afterFlush 在源数据被刷新之后
+- success 执行source get函数（请求数据）成功时
 - fail 执行source get函数（请求数据）失败时，可用于捕获ajax请求的错误信息或在get函数中主动/被动reject的错误信息
 - finish 单次执行数据获取结束，即使fail被触发，也会进入finish生命周期
+- afterAffect 在一切行动开始之后
 
-需要注意，Compound Source 和普通 Source 不同，因为 Compound Source 是依赖其他普通 Source 的，如果普通 Source 执行结束，就会对 Compound Source 产生影响，因此，Compound Source 的 afterFlush, afterAffect 会在每次普通 Source 执行结束时被触发，因此，它们的执行顺序是不确定的。基于相同的道理，Source 的 done, finish 无法替代 Compound Source 的 done, finish（fail 会被通知）。因此，对于 Compound Source 而言，只有主动调用其 renew 函数，才会触发 done, finish，否则只会被 Source 的更新所影响，这一点对于编程而言，其实不是很友好，需要你在开发过程中比较小心的使用。这种情况下，推荐只使用 beforeAffect, afterAffect, fail 这三个周期钩子来处理某些交互（beforeAffect 表示开始, afterAffect 表示成功，fail表示失败，需要在 afterAffect, fail 中都进行重置操作）。
+具体生命周期的钩子如下：
+
+1. beforeAffect, afterAffect 是针对 runner 副作用而言，没有参数，表示副作用过程从开始到结束，一般用来作为渲染的某些处理。（开发者：只有 source 的刷新会带来这两个事件的触发，compund source 不会带来。）需要注意，它们在单一次周期中，只会触发一次，setup 内部在同一时刻可能会存在多个并行的数据请求，每次请求都会带来副作用，但是，为了便于更好的管理，beforeAffect, afterAffect 会合并这些并行请求，只会执行一次。（要警惕数据请求处于持续不断过程中，一旦出现这种情况，afterAffect 不会触发。）
+2. beforeFlush, afterFlush 是针对每一个 source 的数据刷新而言，普通的 source 和 compound source 都会刷新自己的数据，compund source 甚至在一次周期中，由于内部数据的刷新自己刷新多次。
+3. success, fail, finish 是针对数据请求过程而言，它们提供了数据请求的结果状态，对于 compound source 而言，它本身是没有实际的请求过程的，compund source 的结果是计算出来的，因此本身没有这三个事件，但是如果我们直接调用 compound source 的 renew 函数，则它的这三个事件会被触发。
+4. 除了 beforeAffect, afterAffect 其他事件都能接收到具体参数，通过参数判断，你可以知道该事件是由哪一个 source 触发
 
 ## React中使用
 

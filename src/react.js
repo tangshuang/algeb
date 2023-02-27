@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, useLayoutEffect, useMemo } from 'react'
-import { query, setup, isSource, get, subscribe } from 'algeb'
+import { useEffect, useRef, useState, useMemo } from 'react'
+import { query, setup, isSource, subscribe, read } from 'algeb'
 import { isShallowEqual, isArray, isObject } from 'ts-fns'
 
 function useShallowLatest(obj) {
@@ -25,6 +25,11 @@ function useForceUpdate() {
 }
 
 export function useSource(source, ...params) {
+  const args = useShallowLatest(params)
+  const currentValue = isSource(source) ? read(source, ...params) : source
+  const valueRef = useRef(currentValue)
+  const renewRef = useRef(() => Promise.resolve(currentValue))
+
   const pendingRef = useRef(false)
   const errorRef = useRef(null)
 
@@ -39,7 +44,7 @@ export function useSource(source, ...params) {
     }
   }, [])
 
-  const lifecycle = useMemo(() => {
+  const disconnect = useMemo(() => {
     if (!isSource(source)) {
       return
     }
@@ -51,13 +56,7 @@ export function useSource(source, ...params) {
         forceUpdate()
       }
     }
-    const done = () => {
-      pendingRef.current = false
-      errorRef.current = null
-      if (isMounted.current && !isUnmounted.current) {
-        forceUpdate()
-      }
-    }
+
     const fail = (e) => {
       pendingRef.current = false
       errorRef.current = e
@@ -66,43 +65,38 @@ export function useSource(source, ...params) {
       }
     }
 
-    const subscriber = subscribe(source)
-    subscriber.on('beforeAffect', prepare)
-    subscriber.on('afterAffect', done)
-    subscriber.on('fail', fail)
-
-    return { subscriber, prepare, done, fail }
-  }, [source])
-
-  useEffect(() => {
-    return () => {
-      if (lifecycle) {
-        const { subscriber, prepare, done, fail } = lifecycle
-        subscriber.off('beforeAffect', prepare)
-        subscriber.off('afterAffect', done)
-        subscriber.off('fail', fail)
+    const done = () => {
+      pendingRef.current = false
+      if (isMounted.current && !isUnmounted.current) {
+        forceUpdate()
       }
     }
-  }, [lifecycle])
 
-  const args = useShallowLatest(params)
-  const currentValue = isSource(source) ? get(source, ...params) : source
-  const [data, setData] = useState(currentValue)
-  const renewRef = useRef(() => Promise.resolve(currentValue))
-
-  useEffect(() => {
-    if (!isSource(source)) {
-      return
-    }
+    const lifecycle = subscribe()
+    lifecycle.on('beforeAffect', prepare)
+    lifecycle.on('afterAffect', done)
+    lifecycle.on('fail', fail)
 
     const stop = setup(() => {
       const [data, renew] = query(source, ...args)
-      setData(data)
+      valueRef.current = data
       renewRef.current = renew
-    })
+      if (isMounted.current && !isUnmounted.current) {
+        forceUpdate()
+      }
+    }, { lifecycle })
 
-    return stop
+    return () => {
+      stop()
+      lifecycle.off('beforeAffect', prepare)
+      lifecycle.off('afterAffect', done)
+      lifecycle.off('fail', fail)
+    }
   }, [source, args])
 
-  return [data, renewRef.current, pendingRef.current, errorRef.current]
+  useEffect(() => {
+    return disconnect
+  }, [source, args, disconnect])
+
+  return [valueRef.current, renewRef.current, pendingRef.current, errorRef.current]
 }

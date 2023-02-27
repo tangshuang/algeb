@@ -1,5 +1,5 @@
 import { Injectable, ChangeDetectorRef } from '@angular/core'
-import { query, setup, affect, get, isSource, subscribe } from 'algeb'
+import { query, setup, read, isSource, subscribe } from 'algeb'
 
 interface Source {
   value: any,
@@ -14,9 +14,12 @@ export class Algeb {
   constructor(private detectorRef:ChangeDetectorRef) {}
 
   useSource(source:Source, ...params:any[]) {
+    const currentValue = isSource(source) ? read(source, ...params) : source
+    let renew = (...args) => Promise.resolve(currentValue)
     const scope = {
       pending: false,
       error: null,
+      value: currentValue,
     }
 
     if (isSource(source)) {
@@ -25,12 +28,14 @@ export class Algeb {
         scope.pending = true
         this.detectorRef.detectChanges()
       }
-      const done = () => {
+
+      const fail = (e) => {
+        scope.error = e
         scope.pending = false
         this.detectorRef.detectChanges()
       }
-      const fail = (e) => {
-        scope.error = e
+
+      const done = () => {
         scope.pending = false
         this.detectorRef.detectChanges()
       }
@@ -47,13 +52,9 @@ export class Algeb {
       })
     }
 
-    const currentValue = isSource(source) ? get(source, ...params) : source
-    scope.value = currentValue
-    let renew = (...args) => Promise.resolve(currentValue)
-
     if (isSource(source)) {
       const stop = setup(function() {
-        const [some, fetchSome, , lifecycle] = query(source, ...params)
+        const [some, fetchSome] = query(source, ...params)
         scope.value = some
         renew = fetchSome
         this.detectorRef.detectChanges()

@@ -6,10 +6,9 @@ const SomeSource = source((status) => new Promise((resolve, reject) => {
   setTimeout(() => {
     if (status % 2) {
       reject(new Error('err'))
+      return
     }
-    else {
-      resolve({ name: 'sunny', time: Date.now() })
-    }
+    resolve({ name: 'sunny', time: Date.now() })
   }, 1000)
 }), {})
 

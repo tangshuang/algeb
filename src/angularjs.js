@@ -1,7 +1,9 @@
-import { query, setup, isSource, subscribe } from 'algeb'
+import { query, setup, read, isSource, subscribe } from 'algeb'
 
 export function useSource(source, ...params) {
   return function($scope) {
+    const currentValue = isSource(source) ? read(source, ...params) : source
+    let renew = () => Promise.resolve(currentValue)
     const scope = {
       pending: false,
       error: null,
@@ -13,12 +15,14 @@ export function useSource(source, ...params) {
         scope.pending = true
         $scope.$applyAsync()
       }
-      const done = () => {
+
+      const fail = (e) => {
+        scope.error = e
         scope.pending = false
         $scope.$applyAsync()
       }
-      const fail = (e) => {
-        scope.error = e
+
+      const done = () => {
         scope.pending = false
         $scope.$applyAsync()
       }
@@ -34,10 +38,6 @@ export function useSource(source, ...params) {
         subscriber.off('fail', fail)
       })
     }
-
-    const currentValue = isSource(source) ? get(source, ...params) : source
-    scope.value = currentValue
-    let renew = () => Promise.resolve(currentValue)
 
     if (isSource(source)) {
       const stop = setup(function() {
