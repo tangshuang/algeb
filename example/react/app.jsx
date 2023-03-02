@@ -1,5 +1,5 @@
 import { useSource } from 'algeb/react'
-import { source, compose, query } from 'algeb'
+import { source, compose, query, stream } from 'algeb'
 import { useState } from 'react'
 
 const SomeSource = source((status) => new Promise((resolve, reject) => {
@@ -17,9 +17,20 @@ const CompoundSource = compose((status) => {
   return some
 })
 
+const StreamSource = stream(({ initiate, suspend, resolve }) => () => {
+  initiate()
+  setTimeout(() => {
+    suspend(2000)
+    setTimeout(() => {
+      resolve(4000)
+    }, 1000)
+  }, 1000)
+}, 0)
+
 export default function App() {
   const [status, setStatus] = useState(0)
   const [data, renew, pending, error] = useSource(CompoundSource, status)
+  const [count, , pendingCount] = useSource(StreamSource)
 
   let text = ''
 
@@ -41,6 +52,7 @@ export default function App() {
       <div>{text}</div>
       <div><button onClick={() => setStatus(status + 1)}>change</button></div>
       <div><button onClick={() => renew()}>renew</button></div>
+      <div>count: {count} {pendingCount ? 'loading...' : ''}</div>
     </div>
   )
 }

@@ -366,7 +366,15 @@ function queryStream(source, ...params) {
     propagateEvent(item, 'beforeAffect')
     propagateEvent(item, 'beforeFlush', { source, params, prev })
   }
+  const suspend = (value) => {
+    const prev = item.value
+    item.value = value
+    propagateEvent(item, 'success', { source, params, prev, next: value })
+    propagateEvent(item, 'afterFlush', { source, params, prev, next: value })
+    propagateNext(item) // 往上冒泡
+  }
   const resolve = (value) => {
+    const prev = item.value
     item.value = value
     propagateEvent(item, 'success', { source, params, prev, next: value })
     propagateEvent(item, 'finish', { source, params })
@@ -383,7 +391,7 @@ function queryStream(source, ...params) {
     item.stop = fn
   }
   // 立即开始请求
-  const execute = executor(initiate, resolve, reject, terminate)
+  const execute = executor({ initiate, suspend, resolve, reject, terminate })
   execute(...params)
 
   Object.defineProperty(item, 'deferer', {
@@ -548,7 +556,7 @@ export function isSource(source) {
   if (!type) {
     return false
   }
-  return [SOURCE_TYPES.ACTION, SOURCE_TYPES.COMPOSE, SOURCE_TYPES.SOURCE, SOURCE_TYPES.SETUP].includes(type)
+  return [SOURCE_TYPES.ACTION, SOURCE_TYPES.COMPOSE, SOURCE_TYPES.SOURCE, SOURCE_TYPES.SETUP, SOURCE_TYPES.STREAM].includes(type)
 }
 
 /**
@@ -579,6 +587,30 @@ export function request(source, ...params) {
 
   if (type === SOURCE_TYPES.SOURCE) {
     return Promise.resolve(source.get(...params))
+  }
+
+  if (type === SOURCE_TYPES.STREAM) {
+    return new Promise((resolve, reject) => {
+      let stop = null
+      const done = (data) => {
+        resolve(data)
+        stop?.()
+      }
+      const fail = (error) => {
+        reject(error)
+        stop?.()
+      }
+      const execute = source.executor({
+        initiate: () => {},
+        suspend: () => {},
+        done,
+        fail,
+        terminate: (fn) => {
+          stop = fn
+        },
+      })
+      execute(...params)
+    })
   }
 
   throw new Error(`[alegb]: request只能使用action和原子source，不能使用复合source`);
