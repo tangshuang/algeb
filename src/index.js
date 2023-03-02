@@ -5,6 +5,7 @@ export const SOURCE_TYPES = {
   COMPOSE: Symbol('compose'),
   SETUP: Symbol('setup'),
   ACTION: Symbol('action'),
+  STREAM: Symbol('stream'),
 }
 
 const HOSTS_CHAIN = []
@@ -80,6 +81,16 @@ export function compose(get) {
   return source
 }
 
+export function stream(executor, value) {
+  const source = {
+    type: SOURCE_TYPES.STREAM,
+    executor,
+    atoms: [],
+    value,
+  }
+  return source
+}
+
 export function action(act) {
   const cache = {}
   const fn = (...args) => {
@@ -110,6 +121,9 @@ export function query(source, ...params) {
   }
   if (type === SOURCE_TYPES.COMPOSE) {
     return queryCompose(source, ...params)
+  }
+  if (type === SOURCE_TYPES.STREAM) {
+    return queryStream(source, ...params)
   }
   if (type === SOURCE_TYPES.ACTION) {
     throw new Error(`[alegb]: action不能用在query中，只能用在request中，query只能使用source.`)
@@ -326,8 +340,73 @@ function queryCompose(source, ...params) {
   return [item.value, broadcast, item.deferer]
 }
 
+function queryStream(source, ...params) {
+  const { atoms, value, executor } = source
+  const hash = getObjectHash(params)
+  const atom = atoms.find(item => item.hash === hash)
+
+  // 找到对应的原子
+  if (atom) {
+    host(atom)
+    return [atom.value, atom.next, atom.deferer]
+  }
+
+  // 默认原子
+  const item = {
+    hash,
+    value,
+  }
+
+  // 加入图中
+  // 必须先加入，才能在一开始就出发prepareFlush，否则等到加入的时候prepareFlush早就被触发过了
+  host(item)
+
+  const initiate = () => {
+    const prev = item.value
+    propagateEvent(item, 'beforeAffect')
+    propagateEvent(item, 'beforeFlush', { source, params, prev })
+  }
+  const resolve = (value) => {
+    item.value = value
+    propagateEvent(item, 'success', { source, params, prev, next: value })
+    propagateEvent(item, 'finish', { source, params })
+    propagateEvent(item, 'afterFlush', { source, params, prev, next: value })
+    propagateNext(item) // 往上冒泡
+    propagateEvent(item, 'afterAffect')
+  }
+  const reject = (error) => {
+    propagateEvent(item, 'fail', { source, params, error })
+    propagateEvent(item, 'finish', { source, params })
+    propagateEvent(item, 'afterAffect')
+  }
+  const terminate = (fn) => {
+    item.stop = fn
+  }
+  // 立即开始请求
+  const execute = executor(initiate, resolve, reject, terminate)
+  execute(...params)
+
+  Object.defineProperty(item, 'deferer', {
+    get: () => Promise.resolve(item.value),
+    enumerable: true,
+  })
+
+  const next = () => {
+    return item.deferer
+  }
+  item.next = next
+
+  // 生成好了next, deferer, defering
+  atoms.push(item)
+
+  return [item.value, next, item.deferer]
+}
+
 // 解除全部effects，避免内存泄露
 const traverseFree = (host) => {
+  if (host.stop) {
+    host.stop()
+  }
   if (host.hooks) {
     host.hooks.forEach(({ revoke }) => {
       revoke && revoke()

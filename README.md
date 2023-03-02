@@ -162,6 +162,62 @@ updateMix(Book) // 只重新请求Book源
 
 通过compose我们可以组合不同数据源，组合数据源的数据拉取规则，有利于复用一些特定规则。
 
+### stream(executor: (start, resolve, reject, end) => (...params) => void)
+
+创建一个流类型的数据源，在某些场景下，数据是以流的形式，持续的输出数据，此时，我们使用stream数据源。
+
+```js
+const streamSource = stream((initiate, resolve, reject) => (projectId) => {
+  initiate()
+  const myDataStream = request(projectId)
+  const data = {}
+  myDataStream.on('data', (chunk) => {
+    Object.assign(data, chunk)
+  })
+  myDataStream.on('end', () => {
+    resolve(data)
+  })
+  myDataStream.on('error', (error) => {
+    reject(error)
+  })
+})
+```
+
+其中，它的参数：
+
+- initiate() 准备发起请求，此时会触发 beforeAffect和beforeFlush
+- resolve(data) 刷新数据，此时会触发 success, finish, afterFlush, afterAffect，同时，还会让依赖本source的compound source进行刷新
+- reject(error) 报错，此时会触发 fail, finish, afterAffect
+- terminate(unsubscribe) 可选，订阅终止时要执行的函数，当环境被销毁时，unsubscribe函数被执行，从而起到释放内存的作用
+
+其中 initiate, resolve 和 reject 在内部其实可以被多次调用，你需要控制好它们的执行时机，从而控制生命周期流程。例如，我们在做一些轮训时可以如此操作：
+
+```js
+const streamSource = stream((initiate, resolve, reject, terminate) => (projectId) => {
+  let timer = null
+  const request = () => {
+    return fetchData(projectId, resolve, (res) => {
+      if (res.status === 206) {
+        resolve(res.data)
+        initiate()
+        timer = setTimeout(() => {
+          request()
+        }, 2000)
+      }
+      else {
+        reject(res.error)
+      }
+    })
+  }
+  initiate()
+  request()
+  terminate(() => clearTimeout(timer))
+})
+```
+
+上面代码中，我们创建了一个 request 函数，它内部请求了某个数据，但是在请求过程中，由于后端的处理，返回了206状态码，那么我们需要等待2秒钟之后再次发起请求。但是，为了让界面上呈现出部分数据，我们此刻调用了resolve，把已经获得的数据提供给使用方。之后，我们立即调用initiate，以触发界面上的loading效果，之后等了2秒，再运行request函数，最终获得数据之后，就可以在前端完整展示所有数据。
+
+注意：当我们使用query查询stream时，其返回的renew没有实际的作用，无法触发具体的请求逻辑，因为请求的逻辑由 initiate, resolve 等控制。
 
 ### get(source, ...params)
 
