@@ -24,11 +24,12 @@ function useForceUpdate() {
   return () => forceUpdate({});
 }
 
-export function useSource(source, ...params) {
+const createUseSource = (lazy) => (source, ...params) => {
   const args = useShallowLatest(params)
   const currentValue = isSource(source) ? read(source, ...params) : source
   const valueRef = useRef(currentValue)
   const renewRef = useRef(() => Promise.resolve(currentValue))
+  const ctxRef = useRef(null)
 
   const pendingRef = useRef(false)
   const errorRef = useRef(null)
@@ -84,7 +85,11 @@ export function useSource(source, ...params) {
       if (isMounted.current && !isUnmounted.current) {
         forceUpdate()
       }
-    }, { lifecycle })
+    }, { lifecycle, lazy })
+
+    if (lazy) {
+      ctxRef.current = stop
+    }
 
     return () => {
       stop()
@@ -98,5 +103,15 @@ export function useSource(source, ...params) {
     return disconnect
   }, [source, args, disconnect])
 
-  return [valueRef.current, renewRef.current, pendingRef.current, errorRef.current]
+  const renewFn = useMemo(() => (...args) => {
+    if (lazy && ctxRef.current?.start) {
+      return ctxRef.current.start()
+    }
+    return renewRef.current(...args)
+  }, [])
+
+  return [valueRef.current, renewFn, pendingRef.current, errorRef.current]
 }
+
+export const useSource = createUseSource()
+export const useLazySource = createUseSource(true)

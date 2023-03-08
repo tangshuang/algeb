@@ -1,4 +1,4 @@
-import { useSource } from 'algeb/react'
+import { useSource, useLazySource } from 'algeb/react'
 import { source, compose, query, stream } from 'algeb'
 import { useState } from 'react'
 
@@ -20,18 +20,34 @@ const CompoundSource = compose((status) => {
 const StreamSource = stream(({ initiate, suspend, resolve }) => () => {
   initiate()
   setTimeout(() => {
-    suspend(2000)
+    suspend('50%')
     setTimeout(() => {
-      resolve(4000)
+      resolve('100%')
     }, 1000)
+  }, 1000)
+}, '0%')
+
+const LazySource = stream(({ suspend }) => () => {
+  let value = 0
+  setInterval(() => {
+    value ++
+    suspend(value)
   }, 1000)
 }, 0)
 
 export default function App() {
+  return (
+    <>
+      <ShowDateTime></ShowDateTime>
+      <ShowPercent></ShowPercent>
+      <ShowLazy></ShowLazy>
+    </>
+  )
+}
+
+function ShowDateTime() {
   const [status, setStatus] = useState(0)
   const [data, renew, pending, error] = useSource(CompoundSource, status)
-  const [count, , pendingCount] = useSource(StreamSource)
-
   let text = ''
 
   if (pending) {
@@ -52,7 +68,24 @@ export default function App() {
       <div>{text}</div>
       <div><button onClick={() => setStatus(status + 1)}>change</button></div>
       <div><button onClick={() => renew()}>renew</button></div>
-      <div>count: {count} {pendingCount ? 'loading...' : ''}</div>
+    </div>
+  )
+}
+
+function ShowPercent() {
+  const [percent, , percentPending] = useSource(StreamSource)
+  return (
+    <div>Percent: {percent} {percentPending ? 'loading...' : ''}</div>
+  )
+}
+
+function ShowLazy() {
+  const [lazyData, lazyRequest] = useLazySource(LazySource)
+  return (
+    <div>
+      Lazy:
+      <span>{lazyData}</span>
+      <button onClick={() => lazyRequest()}>start</button>
     </div>
   )
 }

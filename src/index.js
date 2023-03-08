@@ -460,12 +460,6 @@ export function setup(run, options = {}) {
     HOOKS_CHAIN.length = 0
   }
   atom.next = next
-  if (lazy) {
-    atom.start = () => {
-      next()
-      delete atom.start
-    }
-  }
 
   stop.next = () => {
     // 还在进行中的，就不需要持续跟进
@@ -474,6 +468,17 @@ export function setup(run, options = {}) {
     }
     atom.end = false
     return next()
+  }
+
+  if (lazy) {
+    stop.start = () => {
+      if (!stop.start) {
+        throw new Error('[alegb]: start can not invoke more than once')
+      }
+      const res = next()
+      delete stop.start
+      return res
+    }
   }
 
   if (!lazy) {

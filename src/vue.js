@@ -1,11 +1,13 @@
 import { shallowRef, computed, onUnmounted, ref } from 'vue'
 import { query, setup, read, isSource, subscribe } from 'algeb'
 
-export function useSource(source, ...params) {
+const createUseSource = (lazy) => (source, ...params) => {
   const currentValue = isSource(source) ? read(source, ...params) : source
   const dataRef = shallowRef(currentValue)
   const data = computed(() => dataRef.value)
+
   let renew = () => Promise.resolve(data)
+  let renewFn = (...args) => renew(...args)
 
   const pendingRef = ref(false)
   const pending = computed(() => pendingRef.value)
@@ -34,9 +36,9 @@ export function useSource(source, ...params) {
 
     const stop = setup(function() {
       const [some, fetchAgain] = query(source, ...params)
-      dataRef.value = some
       renew = fetchAgain
-    }, { lifecycle })
+      dataRef.value = some
+    }, { lifecycle, lazy })
 
     onUnmounted(() => {
       stop()
@@ -44,7 +46,19 @@ export function useSource(source, ...params) {
       lifecycle.off('afterAffect', done)
       lifecycle.off('fail', fail)
     })
+
+    if (lazy) {
+      renewFn = (...args) => {
+        if (stop.start) {
+          return stop.start()
+        }
+        return renew(...args)
+      }
+    }
   }
 
-  return [data, (...args) => renew(...args), pending, error]
+  return [data, renewFn, pending, error]
 }
+
+export const useSource = createUseSource()
+export const useLazySource = createUseSource(true)

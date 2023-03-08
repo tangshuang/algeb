@@ -78,7 +78,7 @@ setup(function() {
 
 这就是 Algeb 的执行机制：通过触发数据源的重新请求，在得到新数据之后，重新执行setup中的函数，从而实现副作用的反复执行。'
 
-setup返回stop函数，同时，它包含3个静态属性：
+setup返回stop函数，同时，它包含3个静态属性（以及一个可能的属性）：
 
 ```
 {
@@ -111,12 +111,12 @@ setInterval(() => {
 }, 1000)
 ```
 
-`options` 目录支持 lifecycle 和 lazy 两个选项，lifecycle 阅读下文。当 lazy 为 true 时，setup 不会立即启动，而是需要你手动调用返回结果中的 start 方法。
+`options` 目前支持 lifecycle 和 lazy 两个选项，lifecycle 阅读下文。当 lazy 为 true 时，setup 不会立即启动，而是需要你手动调用返回结果中的 start 方法。
 
 ## 高级用法
 
 ```js
-import { compose, affect, select } from 'algeb'
+import { compose, affect, select, get } from 'algeb'
 ```
 
 ### compose(fn)
@@ -164,7 +164,7 @@ updateMix(Book) // 只重新请求Book源
 
 ### stream(executor: ({ initiate, suspend, resolve, reject, terminate }) => (...params) => void)
 
-创建一个流类型的数据源，在某些场景下，数据是以流的形式，持续的输出数据，此时，我们使用stream数据源。
+创建一个流类型的数据源(Stream Source)，在某些场景下，数据是以流的形式，持续的输出数据，此时，我们使用stream数据源。
 
 ```js
 const streamSource = stream(({ initiate, resolve, reject }) => (projectId) => {
@@ -260,7 +260,7 @@ renew()
 
 ## Hooks
 
-下面的是hooks函数，它只能在compose或setup内部被使用，否则会导致错误。hooks的使用规则遵循react的规则，不允许在if..else中使用，必须在顶层撰写。
+下面的是hooks函数，它只能在compose或setup内部被使用，否则会导致错误。hooks的使用规则遵循react的规则，不允许在if..else中使用，必须在代码最前面撰写。
 
 ### affect(fn, deps)
 
@@ -425,7 +425,7 @@ lifecycle.off('beforeFlush', print)
 ## React中使用
 
 ```js
-import { useSource } from 'algeb/react'
+import { useSource, useLazySource } from 'algeb/react'
 
 function MyComponent(props) {
   const { id } = props
@@ -438,6 +438,21 @@ function MyComponent(props) {
 - renew: 重新拉取的函数
 - pending: boolean 是否处于请求过程中
 - error??: Error 出错时抛出的错误
+
+`useLazySource` 不会在一开始就发起请求，而是会在调用renew时才发起，这有利于我们控制和减少首屏打开时就发出请求。
+
+```js
+function MyComponent(props) {
+  const { id } = props
+  const [data, request, pending, error] = useLazySource(SomeSource, id)
+  // ...
+
+  // 点击某个按钮后才开始发出请求
+  const handleStart = () => {
+    request()
+  }
+}
+```
 
 ## Vue中使用
 
