@@ -162,7 +162,7 @@ updateMix(Book) // 只重新请求Book源
 
 通过compose我们可以组合不同数据源，组合数据源的数据拉取规则，有利于复用一些特定规则。
 
-### stream(executor: ({ initiate, suspend, resolve, reject, terminate }) => (...params) => void)
+### stream(executor: ({ initiate, suspend, resolve, reject, complete }) => (...params) => void)
 
 创建一个流类型的数据源(Stream Source)，在某些场景下，数据是以流的形式，持续的输出数据，此时，我们使用stream数据源。
 
@@ -189,12 +189,12 @@ const streamSource = stream(({ initiate, resolve, reject }) => (projectId) => {
 - suspend(data) 刷新数据，但请求处于过程中，并未结束，会触发 success, afterFlush，同时，还会让依赖本source的compound source进行刷新，可以在finish之前被多次调用
 - resolve(data) 刷新数据，此时会触发 success, finish, afterFlush, afterAffect，同时，还会让依赖本source的compound source进行刷新
 - reject(error) 报错，此时会触发 fail, finish, afterAffect
-- terminate(unsubscribe) 可选，订阅终止时要执行的函数，当环境被销毁时，unsubscribe函数被执行，从而起到释放内存的作用
+- complete(unsubscribe) 可选，订阅终止时要执行的函数，当环境被销毁时，unsubscribe函数被执行，从而起到释放内存的作用
 
 在调用这些方法时，你一定要安排好它们的调用时机，避免生命周期混乱导致表现不符合预期。例如，我们在做一些轮训时可以如此操作：
 
 ```js
-const streamSource = stream(({ initiate, suspend, resolve, reject, terminate }) => (projectId) => {
+const streamSource = stream(({ initiate, suspend, resolve, reject, complete }) => (projectId) => {
   let timer = null
   const request = () => {
     return fetchData(projectId, resolve, (res) => {
@@ -211,7 +211,7 @@ const streamSource = stream(({ initiate, suspend, resolve, reject, terminate }) 
   }
   initiate()
   request()
-  terminate(() => clearTimeout(timer))
+  complete(() => clearTimeout(timer))
 })
 ```
 

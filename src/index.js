@@ -387,11 +387,11 @@ function queryStream(source, ...params) {
     propagateEvent(item, 'finish', { source, params })
     propagateEvent(item, 'afterAffect')
   }
-  const terminate = (fn) => {
+  const complete = (fn) => {
     item.stop = fn
   }
   // 立即开始请求
-  const execute = executor({ initiate, suspend, resolve, reject, terminate })
+  const execute = executor({ initiate, suspend, resolve, reject, complete })
   execute(...params)
 
   Object.defineProperty(item, 'deferer', {
@@ -610,7 +610,7 @@ export function request(source, ...params) {
         suspend: () => {},
         done,
         fail,
-        terminate: (fn) => {
+        complete: (fn) => {
           stop = fn
         },
       })
