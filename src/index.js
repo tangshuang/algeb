@@ -502,14 +502,15 @@ export function release(source, ...params) {
   else if (!params.length) {
     release([source])
   }
-  // 如果传入了参数，则根据参数清楚特定的信息
+  // 如果传入了参数，则根据参数清除特定的信息
   else {
     const { atoms, value } = source
     const hash = getObjectHash(params)
-    const atom = atoms.find(item => item.hash === hash)
-    if (atom) {
-      atom.value = value
+    const index = atoms.findIndex(item => item.hash === hash)
+    if (index > -1) {
+      const atom = atoms[index]
       traverseFree(atom)
+      atoms.splice(index, 1)
     }
   }
 }
