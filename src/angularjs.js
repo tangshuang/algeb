@@ -12,7 +12,7 @@ const createUseSource = (lazy) => (source, ...params) => ($scope) => {
   }
 
   if (isSource(source)) {
-    const prepare = () => {
+    const ready = () => {
       scope.error = null
       scope.pending = true
       $scope.$applyAsync()
@@ -30,13 +30,13 @@ const createUseSource = (lazy) => (source, ...params) => ($scope) => {
     }
 
     const lifecycle = subscribe()
-    lifecycle.on('beforeAffect', prepare)
-    lifecycle.on('afterAffect', done)
+    lifecycle.on('ready', ready)
+    lifecycle.on('success', done)
     lifecycle.on('fail', fail)
 
     $scope.$on('$destroy', () => {
-      lifecycle.off('beforeAffect', prepare)
-      lifecycle.off('afterAffect', done)
+      lifecycle.off('ready', ready)
+      lifecycle.off('success', done)
       lifecycle.off('fail', fail)
     })
 

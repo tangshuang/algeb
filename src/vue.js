@@ -15,7 +15,7 @@ const createUseSource = (lazy) => (source, ...params) => {
   const error = computed(() => errorRef.value)
 
   if (isSource(source)) {
-    const prepare = () => {
+    const ready = () => {
       pendingRef.value = true
       errorRef.value = null
     }
@@ -30,8 +30,8 @@ const createUseSource = (lazy) => (source, ...params) => {
     }
 
     const lifecycle = subscribe(source)
-    lifecycle.on('beforeAffect', prepare)
-    lifecycle.on('afterAffect', done)
+    lifecycle.on('ready', ready)
+    lifecycle.on('success', done)
     lifecycle.on('fail', fail)
 
     const stop = setup(function() {
@@ -42,8 +42,8 @@ const createUseSource = (lazy) => (source, ...params) => {
 
     onUnmounted(() => {
       stop()
-      lifecycle.off('beforeAffect', prepare)
-      lifecycle.off('afterAffect', done)
+      lifecycle.off('ready', ready)
+      lifecycle.off('success', done)
       lifecycle.off('fail', fail)
     })
 

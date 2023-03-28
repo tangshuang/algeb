@@ -212,7 +212,7 @@ function querySource(source, ...params) {
 
     const prev = item.value
     propagateEvent(item, 'beforeAffect')
-    propagateEvent(item, 'beforeFlush', { source, params, prev })
+    propagateEvent(item, 'ready', { source, params, prev })
 
     const res = get(...params)
     item.defering = 1
@@ -221,7 +221,6 @@ function querySource(source, ...params) {
         item.value = value
         propagateEvent(item, 'success', { source, params, prev, next: value })
         propagateEvent(item, 'finish', { source, params })
-        propagateEvent(item, 'afterFlush', { source, params, prev, next: value })
         item.defering = 0
         propagateNext(item) // 往上冒泡
         propagateEvent(item, 'afterAffect')
@@ -275,11 +274,8 @@ function queryCompose(source, ...params) {
   }
 
   const next = () => {
-    const prev = item.value
-    propagateEvent(item, 'beforeFlush', { source, params, prev })
     run(item)
     const next = item.value
-    propagateEvent(item, 'afterFlush', { source, params, prev, next })
     propagateNext(item) // 往上冒泡
     return Promise.resolve(next)
   }
@@ -288,7 +284,9 @@ function queryCompose(source, ...params) {
   const broadcast = (...sources) => {
     const deps = item.deps
     const prev = item.value
+
     const defer = (reqs) => {
+      propagateEvent(item, 'ready', { source, params, prev })
       item.deferer = Promise.all(reqs)
         .then(() => {
           // 内部会去遍历依赖，并触发依赖的重新计算，
@@ -364,13 +362,12 @@ function queryStream(source, ...params) {
   const initiate = () => {
     const prev = item.value
     propagateEvent(item, 'beforeAffect')
-    propagateEvent(item, 'beforeFlush', { source, params, prev })
+    propagateEvent(item, 'ready', { source, params, prev })
   }
   const suspend = (value) => {
     const prev = item.value
     item.value = value
     propagateEvent(item, 'success', { source, params, prev, next: value })
-    propagateEvent(item, 'afterFlush', { source, params, prev, next: value })
     propagateNext(item) // 往上冒泡
   }
   const resolve = (value) => {
@@ -378,7 +375,6 @@ function queryStream(source, ...params) {
     item.value = value
     propagateEvent(item, 'success', { source, params, prev, next: value })
     propagateEvent(item, 'finish', { source, params })
-    propagateEvent(item, 'afterFlush', { source, params, prev, next: value })
     propagateNext(item) // 往上冒泡
     propagateEvent(item, 'afterAffect')
   }

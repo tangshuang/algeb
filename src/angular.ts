@@ -18,7 +18,7 @@ const createUseSource = (lazy?: boolean) => function(source:Source, ...params:an
   }
 
   if (isSource(source)) {
-    const prepare = () => {
+    const ready = () => {
       scope.error = null
       scope.pending = true
       this.detectorRef.detectChanges()
@@ -37,13 +37,13 @@ const createUseSource = (lazy?: boolean) => function(source:Source, ...params:an
 
     // @ts-ignore
     const lifecycle = subscribe()
-    lifecycle.on('beforeAffect', prepare)
-    lifecycle.on('afterAffect', done)
+    lifecycle.on('ready', ready)
+    lifecycle.on('success', done)
     lifecycle.on('fail', fail)
 
     this.destroies.push(() => {
-      lifecycle.off('beforeAffect', prepare)
-      lifecycle.off('afterAffect', done)
+      lifecycle.off('ready', ready)
+      lifecycle.off('success', done)
       lifecycle.off('fail', fail)
     })
 

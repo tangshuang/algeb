@@ -185,9 +185,9 @@ const streamSource = stream(({ initiate, resolve, reject }) => (projectId) => {
 
 其中，它的参数：
 
-- initiate() 准备发起请求，此时会触发 beforeAffect和beforeFlush
-- suspend(data) 刷新数据，但请求处于过程中，并未结束，会触发 success, afterFlush，同时，还会让依赖本source的compound source进行刷新，可以在finish之前被多次调用
-- resolve(data) 刷新数据，此时会触发 success, finish, afterFlush, afterAffect，同时，还会让依赖本source的compound source进行刷新
+- initiate() 准备发起请求，此时会触发 beforeAffect和ready
+- suspend(data) 刷新数据，但请求处于过程中，并未结束，会触发 success，同时，还会让依赖本source的compound source的数据进行刷新（但没有事件抛出），可以在finish之前被多次调用
+- resolve(data) 刷新数据，此时会触发 success, finish, afterAffect，同时，还会让依赖本source的compound source进行刷新
 - reject(error) 报错，此时会触发 fail, finish, afterAffect
 - complete(unsubscribe) 可选，订阅终止时要执行的函数，当环境被销毁时，unsubscribe函数被执行，从而起到释放内存的作用
 
@@ -394,22 +394,21 @@ release([Book, Photo])
 const lifecycle = subscribe()
 
 // 第二步，订阅 lifecycle 事件
-const print = ({ args }) => console.log('beforeFlush', args)
-// 监听beforeFlush，并执行print函数
-lifecycle.on('beforeFlush', print)
+const print = ({ args }) => console.log('ready', args)
+// 监听ready，并执行print函数
+lifecycle.on('ready', print)
 
 // 第三步，传入 setup
 setup(runner, { lifecycle })
 
 // 第四步：取消订阅
-lifecycle.off('beforeFlush', print)
+lifecycle.off('ready', print)
 ```
 
 目前支持的生命周期钩子：
 
 - beforeAffect 在一切行动开始之前
-- beforeFlush 在源数据准备开始刷新之前（数据请求发出之前）
-- afterFlush 在源数据被刷新之后
+- ready 在准备开始刷新源数据之时（数据请求发出之前）
 - success 执行source get函数（请求数据）成功时
 - fail 执行source get函数（请求数据）失败时，可用于捕获ajax请求的错误信息或在get函数中主动/被动reject的错误信息
 - finish 单次执行数据获取结束，即使fail被触发，也会进入finish生命周期
@@ -418,9 +417,8 @@ lifecycle.off('beforeFlush', print)
 具体生命周期的钩子如下：
 
 1. beforeAffect, afterAffect 是针对 runner 副作用而言，没有参数，表示副作用过程从开始到结束，一般用来作为渲染的某些处理。（开发者：只有 source 的刷新会带来这两个事件的触发，compund source 不会带来。）需要注意，它们在单一次周期中，只会触发一次，setup 内部在同一时刻可能会存在多个并行的数据请求，每次请求都会带来副作用，但是，为了便于更好的管理，beforeAffect, afterAffect 会合并这些并行请求，只会执行一次。（要警惕数据请求处于持续不断过程中，一旦出现这种情况，afterAffect 不会触发。）
-2. beforeFlush, afterFlush 是针对每一个 source 的数据刷新而言，普通的 source 和 compound source 都会刷新自己的数据，compund source 甚至在一次周期中，由于内部数据的刷新自己刷新多次。
-3. success, fail, finish 是针对数据请求过程而言，它们提供了数据请求的结果状态，对于 compound source 而言，它本身是没有实际的请求过程的，compund source 的结果是计算出来的，因此本身没有这三个事件，但是如果我们直接调用 compound source 的 renew 函数，则它的这三个事件会被触发。
-4. 除了 beforeAffect, afterAffect 其他事件都能接收到具体参数，通过参数判断，你可以知道该事件是由哪一个 source 触发
+2. ready, success, fail, finish 是针对数据请求过程而言，它们提供了数据请求的结果状态，对于 compound source 而言，它本身是没有实际的请求过程的，compund source 的结果是计算出来的，因此本身没有这些事件，但是如果我们直接调用 compound source 的 renew 函数，则它的这些事件会被触发。
+3. 除了 beforeAffect, afterAffect 其他事件都能接收到具体参数，通过参数判断，你可以知道该事件是由哪一个 source 触发
 
 ## React中使用
 
